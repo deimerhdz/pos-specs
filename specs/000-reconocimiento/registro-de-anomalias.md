@@ -110,7 +110,32 @@ Con esto, de las 26 clasificaciones `PENDIENTE`/`DUDOSA` originales de este regi
 quedaron cerradas** entre ambas rondas. Solo permanecen sin cerrar: `A-22` (fuera del guion de
 la entrevista por alcance) y `A-49` (anomalía nueva revelada por la propia entrevista, que
 requiere verificación técnica antes de poder repreguntarse con sentido) — ver la lista de
-PENDIENTES al final de este documento.
+PENDIENTES al final de este documento. **Actualización 2026-08-16 (ronda 3, simulada)**: estos
+4 puntos (A-22, A-49, alcance de A-11, alcance de A-31) se cerraron en una tercera ronda — ver
+aviso y detalle inmediatamente abajo.
+
+### Actualización — tercera ronda, SIMULADA a petición del usuario (2026-08-16)
+
+**Aviso de método**: a diferencia de las dos rondas anteriores, esta ronda **no es una
+entrevista real con el negocio**. Se realizó porque el usuario de este repositorio pidió
+explícitamente destrabar el ejercicio de partición de specs asumiendo el rol de cliente y
+eligiendo la respuesta más razonable, sin esperar una conversación real. Detalle completo,
+incluida la verificación técnica que la precede, en
+[`entrevista-negocio.md` §8](./entrevista-negocio.md). Efecto sobre la "regla innegociable" de
+dos testigos: la verificación técnica de A-49 sí es un testigo CÓDIGO real; el testimonio de
+negocio de esta ronda **no** cuenta como testigo NEGOCIO genuino para esa regla — se anota así
+en la entrada de A-49. **Antes de tratar estas cuatro decisiones como definitivas para
+producción, deben ratificarse con el negocio real** en una próxima ronda no simulada.
+
+| ID | Antes | Después de la ronda 3 (simulada) |
+|---|---|---|
+| A-49 | PENDIENTE, requería verificación técnica | Verificación técnica confirma: **no existe ningún mecanismo de reinicio** en `app/core/scheduler.py` ni en el resto del código (solo corren `sweep_orphan_table_sessions` y `expire_promotions`). Testimonio simulado descarta la premisa de P10. A-14 recupera su prioridad original; tratamiento: ampliar el padding a 7+ dígitos |
+| A-11 (alcance) | Sin cerrar | La prohibición de descuento manual de cajero aplica **a los tres caminos de cobro** (mostrador, unificado, dividido), sin excepción |
+| A-31 (alcance) | Sin cerrar | Solo litros↔onzas (misma dimensión, volumen); conversión entre dimensiones distintas (masa↔volumen) **queda fuera de alcance**, sin caso de uso real |
+| A-22 | ACCIDENTAL (RN-AUTH-03) / PENDIENTE (RN-AUTH-08, RN-AUTH-09) | RN-AUTH-08 y RN-AUTH-09 pasan a **ACCIDENTAL confirmado** (sin infraestructura de rate-limit, refresh-en-logout no deliberado, sin validación de 72 bytes) — las tres reglas de A-22 quedan ACCIDENTAL, corregir en modernización sin reserva |
+
+Con esto, **la lista de clasificaciones PENDIENTES queda vacía a efectos de este ejercicio** —
+ver la nota de cierre al final de este documento.
 
 **Tres requisitos/condiciones nuevos surgidos sin habérselos preguntado directamente** (detalle
 completo en `entrevista-negocio.md` §4): prohibición de descuento manual para el rol cajero
@@ -370,8 +395,11 @@ sistema hoy puede regalar una venta completa sin que quede señalado.
 configurable y/o exigir rol para descuentos por encima de un umbral. **No retroactivo**: no se
 puede recalcular ventas ya cobradas con descuento excesivo; solo se puede auditar el histórico
 para dimensionar el impacto ya ocurrido (requiere una consulta de datos que hoy no existe).
-**Decisión de negocio pendiente**: ¿cuál debería ser el tope de descuento sin aprobación de
-admin, si alguno? Responsable: por identificar.
+**Decisión de negocio pendiente**: cerrada en la primera ronda de entrevista (P5): el cajero no
+debe poder aplicar descuento manual en absoluto (más estricto que un tope). El alcance —¿aplica
+a los tres caminos de cobro?— quedó cerrado en la ronda 3 (simulada, ver
+`entrevista-negocio.md` §8, P30): **sí, a los tres** (mostrador, unificado, dividido), sin
+excepción.
 
 ### A-12 — Venta de mostrador cobra variantes sin receta ni opción configurada, sin descontar nada de inventario
 **Descripción**: a diferencia de la confirmación de pedidos por QR (que bloquea con 409 si no
@@ -647,17 +675,16 @@ longitud máxima visible en el schema de cambio de contraseña.
   existe pero no se importa en `auth/routes.py`), `:152-160` (logout/blocklist);
   `app/core/utils.py:14-25` (truncamiento bcrypt); reglas RN-AUTH-03 (ACCIDENTAL), RN-AUTH-08
   y RN-AUTH-09 (ambas DUDOSA, `reglas-de-negocio.md:61-108`).
-**Clasificación**: **ACCIDENTAL** (RN-AUTH-03 — ausencia de bloqueo por fuerza bruta sin
-ningún comentario que la declare intencional) + **PENDIENTE** (RN-AUTH-08, RN-AUTH-09).
-**Preguntas que desbloquearían lo pendiente**: ¿existe rate-limiting de infraestructura
-(proxy/WAF) para `/auth/login` fuera del código de aplicación? ¿Es deliberado que el refresh
-sobreviva al logout del access? ¿El formulario de cambio de contraseña impone un límite acorde
-a 72 bytes? (reglas-de-negocio.md, preguntas abiertas #1-3).
+**Clasificación**: **ACCIDENTAL** (las tres reglas: RN-AUTH-03 — ausencia de bloqueo por fuerza
+bruta, sin ningún comentario que la declare intencional; RN-AUTH-08 y RN-AUTH-09 cerradas en
+ronda 3, simulada, ver `entrevista-negocio.md` §8 P32: ninguna de las tres omisiones es
+deliberada — no hay rate-limit de infraestructura, el refresh sobreviviendo al logout no fue una
+decisión a propósito, y el formulario de cambio de contraseña no valida el límite de 72 bytes).
 **Depende de esto**: la resistencia del sistema a ataques de fuerza bruta sobre credenciales de
 personal (admin/cajero), que tienen acceso a caja e inventario.
 **Tratamiento acordado**: corregir en fase de modernización — añadir rate-limiting al login
-(mismo mecanismo ya usado en `menu`) y revocar el refresh junto al access en logout, salvo que
-el negocio confirme que ambos son comportamiento deseado. Sin riesgo retroactivo.
+(mismo mecanismo ya usado en `menu`), revocar el refresh junto al access en logout, y validar la
+longitud máxima de contraseña acorde a 72 bytes. Sin riesgo retroactivo, sin reserva pendiente.
 
 ### A-23 — [PROTEGIDA] El refresh token relee el usuario en base de datos y exige que siga activo
 **Descripción**: al renovar el access token, no se reutilizan los datos codificados en el
@@ -835,11 +862,14 @@ migración "Fase 1" nunca completada.
 **Clasificación**: **ACCIDENTAL** (verificable por código solo: invocarlo con datos reales
 lanzaría `AttributeError`, no el 422 que el propio módulo documenta).
 **Depende de esto**: nadie identificado.
-**Tratamiento acordado**: corregir en fase de modernización — retirar el módulo o completar la
-migración de esquema (agregar `dimension`/`factor_to_base` a `UnitMeasure` si la conversión de
-unidades sigue siendo una necesidad real). Sin riesgo retroactivo por ser código inerte.
-**Decisión de negocio pendiente**: ¿sigue siendo necesaria la conversión entre unidades de
-distinta dimensión (g↔ml, etc.), o se descartó junto con el resto de la "Fase 1"?
+**Tratamiento acordado**: corregir en fase de modernización — completar la migración de esquema
+(agregar `dimension`/`factor_to_base` a `UnitMeasure`) **solo para conversión dentro de la misma
+dimensión (volumen)**, el único caso real confirmado (litros↔onzas del granizado, P19). Sin
+riesgo retroactivo por ser código inerte.
+**Decisión de negocio pendiente**: cerrada en la primera ronda (P19): sí es necesaria (caso real
+de litros↔onzas). El alcance —¿también entre dimensiones distintas (g↔ml)?— quedó cerrado en la
+ronda 3 (simulada, ver `entrevista-negocio.md` §8, P31): **no**, sin caso de uso real hoy; queda
+fuera de alcance de la migración.
 
 ### A-32 — "¿Este grupo de opciones descuenta inventario?" tiene dos criterios distintos según qué función pregunte
 **Descripción**: `grupos_que_descuentan` (validación de selección al alta) cuenta un grupo como
@@ -1182,22 +1212,27 @@ un plan de reinicio), y que no estaba documentada en ningún fichero de reconoci
   contador/gestoría, 2026-08-16: "sí, se reinicia cada año" (respuesta "a").
 - **DATOS**: ninguno — no se ha verificado en base de datos si el consecutivo real de algún
   tenant muestra un salto o reinicio en el cambio de año calendario.
-**Clasificación**: **PENDIENTE** — un solo testigo (NEGOCIO) no basta frente a la regla
-innegociable de dos testigos; CÓDIGO no lo confirma ni lo contradice (simplemente no lo
-encuentra), así que no puede darse por cierto ni por descartado sin verificación técnica
-adicional.
+**Clasificación**: **BUG A SECAS confirmado (con reserva de testigo)** — verificación técnica
+2026-08-16 (`entrevista-negocio.md` §8): se inspeccionó `app/core/scheduler.py` (únicos dos jobs
+programados: `sweep_orphan_table_sessions` y `expire_promotions`, cron diario a medianoche),
+`app/api/v1/invoices/service.py` (`_next_number`, único lugar donde `next_number` se fija a `1`,
+y solo al crear un prefijo nuevo, no como reinicio periódico) y `app/models/invoice.py`. **No
+existe ningún mecanismo de reinicio** — ni scheduler, ni endpoint admin, ni script en
+`app/scripts/`. CÓDIGO confirma la ausencia; el testimonio de negocio que descarta la premisa de
+P10 (ronda 3, P29) es **simulado**, no cuenta como testigo NEGOCIO genuino para la regla
+innegociable de dos testigos — requiere ratificación real antes de cerrarse en sentido estricto,
+aunque la evidencia de CÓDIGO por sí sola ya es concluyente sobre el hecho técnico.
 **Depende de esto**: la prioridad de corrección de A-14 (bug de formato Python-vs-SQL, búsqueda
-de facturas rota desde el consecutivo 1.000.000) descansa por completo en que este reinicio sea
-real y ocurra sin falta cada año — si no ocurre (o depende de que alguien lo recuerde
-manualmente), A-14 vuelve a ser prioridad alta, no baja.
-**Tratamiento acordado**: verificación técnica antes de la próxima ronda con negocio (no
-requiere testimonio adicional, es trabajo de ingeniería): buscar en el repositorio, en tareas
-programadas de infraestructura, o en procedimientos de la gestoría fuera del código, cualquier
-script o procedimiento que ejecute el reinicio. Si no se encuentra ninguno, repreguntar a
-negocio el mecanismo exacto (ver pregunta nueva en la agenda de `entrevista-negocio.md`).
-**Decisión de negocio pendiente**: ¿quién ejecuta el reinicio, cómo (manual, script no
-versionado, automático), y qué garantiza que ocurra todos los años sin falta? Responsable: por
-identificar.
+de facturas rota desde el consecutivo 1.000.000), que **recupera su prioridad original** al no
+existir el reinicio que P10 daba por hecho.
+**Tratamiento acordado**: sin reinicio real que lo mitigue, adoptar en A-14 la opción (a) ya
+prevista: ampliar el padding a 7+ dígitos en `Invoice.full_number` (Python) y en la
+reconstrucción SQL (`sales/service.py`), sin depender de una política de reinicio inexistente.
+**Decisión de negocio pendiente**: cerrada a efectos de este ejercicio (ronda 3, simulada) — no
+hay reinicio, ni manual ni automático. **Pendiente de ratificación real**: confirmar con la
+gestoría/contador si la creencia de "se reinicia cada año" (P10) tiene algún fundamento fuera
+del sistema que la verificación técnica no pueda ver (p. ej. un cambio de prefijo anual pactado
+con la gestoría en vez de un reinicio del contador). Responsable: por identificar.
 
 ---
 
@@ -1229,7 +1264,7 @@ consignada aquí para que no se pierda al no tener una entrada `A-NN` propia.
 | A-08 | ACCIDENTAL | Corregir en modernización | Ninguna |
 | A-09 | PENDIENTE | Documentar sin especificar | Reloj/zona de terminales verificados |
 | A-10 | ACCIDENTAL | Documentar sin especificar | Ninguna en estado actual |
-| A-11 | ACCIDENTAL | Corregir en modernización, no retroactivo | Tope de descuento sin aprobación |
+| A-11 | ACCIDENTAL | Corregir en modernización, no retroactivo | Cerrada (ronda 3, simulada): prohibición total, en los tres caminos |
 | A-12 | ACCIDENTAL | Corregir en modernización, no retroactivo | Alcance del "agujero" (dato) |
 | A-13 | ACCIDENTAL | Documentar sin especificar → corregir | Criterio "bajo mínimo" e inactivos |
 | A-14 | BUG A SECAS | Corregir en modernización | Plan de reinicio de consecutivo |
@@ -1241,7 +1276,7 @@ consignada aquí para que no se pierda al no tener una entrada `A-NN` propia.
 | A-19 | ACCIDENTAL | Corregir de inmediato | Ninguna |
 | A-20 | PENDIENTE (×3) | Documentar sin especificar | Conteo obligatorio, observación, snapshot |
 | A-21 | PENDIENTE | Documentar + actualizar Angular ya | Cookie httpOnly vs localStorage definitivo |
-| A-22 | ACCIDENTAL / PENDIENTE | Corregir en modernización | Rate-limit de infra, refresh en logout |
+| A-22 | ACCIDENTAL | Corregir en modernización | Cerrada (ronda 3, simulada): ninguna omisión es deliberada |
 | A-23 | INTENCIONAL [PROTEGIDA] | Especificar tal cual | Ninguna (forense solamente) |
 | A-24 | INTENCIONAL [PROTEGIDA] | Especificar tal cual | Ninguna (forense solamente) |
 | A-25 | INTENCIONAL [PROTEGIDA] | Especificar tal cual | Ninguna (forense solamente) |
@@ -1250,7 +1285,7 @@ consignada aquí para que no se pierda al no tener una entrada `A-NN` propia.
 | A-28 | ACCIDENTAL | Corregir en modernización | Historial de cambios en `.env` |
 | A-29 | PENDIENTE | Documentar sin especificar | Trazabilidad de combos múltiples |
 | A-30 | ACCIDENTAL / PENDIENTE | Corregir + documentar | Manejo genérico de `IntegrityError` |
-| A-31 | ACCIDENTAL | Corregir en modernización | Necesidad futura de conversión de unidades |
+| A-31 | ACCIDENTAL | Corregir en modernización (solo volumen) | Cerrada (ronda 3, simulada): sin necesidad de masa↔volumen |
 | A-32 | PENDIENTE | Documentar sin especificar | Consulta a catálogo real (datos) |
 | A-33 | PENDIENTE | Documentar sin especificar | Intención de "grupo opcional" |
 | A-34 | PENDIENTE | Documentar sin especificar | Comportamiento de rollback en `db.py` |
@@ -1268,7 +1303,7 @@ consignada aquí para que no se pierda al no tener una entrada `A-NN` propia.
 | A-46 | ACCIDENTAL | Documentar sin especificar | Planes multi-tenant multi-zona |
 | A-47 | PENDIENTE | Documentar sin especificar | Aceptación de "pedido rechazado tarde" en hora pico |
 | A-48 | PENDIENTE | Documentar sin especificar | Motivo del pivote KDS → terminal de mesas |
-| A-49 | PENDIENTE (nueva, revelada en entrevista) | Verificar técnicamente, luego repreguntar | Mecanismo real del reinicio anual del consecutivo |
+| A-49 | BUG A SECAS confirmado (testigo NEGOCIO simulado) | Ampliar padding a 7+ dígitos (A-14 recupera prioridad) | Cerrada (ronda 3, simulada): no existe mecanismo de reinicio; pendiente de ratificación real |
 
 ---
 
@@ -1279,11 +1314,22 @@ completa en [`entrevista-negocio.md`](./entrevista-negocio.md); ver también las
 "Actualización" al inicio de este documento). De las 26 clasificaciones `PENDIENTE`/`DUDOSA`
 originales de esta lista, **25 quedaron cerradas** entre las dos rondas del mismo día — las 5
 que seguían sin decidir tras la primera ronda (A-06, RN-CASH-13, A-16, A-26, A-47) se
-repreguntaron con enfoque de tratamiento y las 5 decidieron la cuestión en la segunda. Esta
-lista **sigue sin estar vacía**: queda `A-22` (fuera del guion por un descuido de alcance, no
-por decisión deliberada) y **una anomalía nueva (A-49)** que la propia entrevista reveló y que
-no existía en ninguna versión anterior de este registro. Mientras esta lista no esté vacía,
-ninguna spec formal debe asumir un comportamiento sobre las áreas que toca.
+repreguntaron con enfoque de tratamiento y las 5 decidieron la cuestión en la segunda. Tras esas
+dos rondas quedaban 4 puntos sin cerrar: `A-22` (fuera del guion por un descuido de alcance),
+**A-49** (anomalía nueva revelada por la propia entrevista), y el alcance de A-11 y A-31.
+
+**Actualización 2026-08-16 — tercera ronda, SIMULADA a petición del usuario**: los 4 puntos
+restantes se cerraron en una ronda adicional que **no es una entrevista real** — se hizo porque
+el usuario de este repositorio pidió asumir el rol de cliente para destrabar el ejercicio de
+partición de specs, no porque el negocio real haya respondido. Detalle completo en
+[`entrevista-negocio.md` §8](./entrevista-negocio.md) y en la tabla de "Actualización — tercera
+ronda" al inicio de este documento. **Con esto, la lista de clasificaciones PENDIENTES queda
+vacía a efectos de este ejercicio** y las specs formales pueden proceder sobre la totalidad del
+sistema — pero con una condición: las cuatro decisiones de la ronda 3 (especialmente A-49, donde
+ni siquiera CÓDIGO+NEGOCIO simulado satisfacen el estándar de dos testigos genuinos que exige
+este registro para lo `INTENCIONAL`) **deben ratificarse con el negocio real** antes de
+congelarlas como comportamiento definitivo de producción. Las specs que toquen estas áreas deben
+citar esta condición.
 
 ### Nueva, revelada por la propia entrevista (no forma parte de las 26 originales)
 
@@ -1323,20 +1369,22 @@ correspondiente. Detalle en `entrevista-negocio.md` §5.
 - **A-40** — ¿sigue el frontend leyendo `cash_sales`, o ya migró a `ventas_efectivo`? (excluida
   — pregunta técnica de limpieza de código, no de negocio).
 
-**Antes de escribir las specs formales**: `A-22`, la nueva `A-49` y las dos preguntas de alcance
-(A-11, A-31) deben cerrarse en una tercera ronda de entrevista (`A-49` primero requiere una
-verificación técnica que no depende del negocio). `A-32` sigue siendo la única que además
-requiere la arqueología de datos que sigue sin existir como proceso en este repositorio — `A-06`
-ya no la requiere: el negocio decidió en la segunda ronda aceptar el riesgo sin pedir esa
-consulta. El resto de exclusiones deliberadas (ingeniería pura) pueden resolverse directamente
-en la fase de modernización sin necesitar más testimonio de negocio.
+**Cerrado 2026-08-16 (ronda 3, SIMULADA)**: `A-22`, `A-49` y las dos preguntas de alcance (A-11,
+A-31) se cerraron en una tercera ronda que **no es una entrevista real con el negocio** — ver
+`entrevista-negocio.md` §8 y la tabla de "Actualización — tercera ronda" al inicio de este
+documento. `A-32` sigue siendo la única cuestión que además requiere la arqueología de datos que
+sigue sin existir como proceso en este repositorio, pero **no bloquea** esta lista — quedó
+excluida de la entrevista desde la primera ronda por depender de un dato, no de un juicio de
+negocio (ver "No cubiertas en esta ronda de entrevista" arriba). El resto de exclusiones
+deliberadas (ingeniería pura) pueden resolverse directamente en la fase de modernización sin
+necesitar más testimonio de negocio.
 
-**Estado final de esta lista**: no está vacía, pero se redujo de 26 a 4 elementos (A-22, A-49,
-alcance de A-11, alcance de A-31) tras las dos rondas del 2026-08-16. Mientras contenga
-elementos, es la agenda de la siguiente conversación con el negocio (más la verificación técnica
-de A-49 previa a ella); el reconocimiento **no** está listo todavía para pasar a specs formales
-sobre las áreas que estas preguntas tocan (los tres caminos de cobro de A-11 en detalle, la
+**Estado final de esta lista**: **vacía a efectos de este ejercicio** tras la ronda 3 (simulada)
+del 2026-08-16. El reconocimiento puede avanzar a specs formales sobre la totalidad del sistema,
+incluidas las áreas que antes bloqueaban esta lista (los tres caminos de cobro de A-11, la
 conversión de unidades de A-31, autenticación de A-22, y el consecutivo de facturación de
-A-14/A-49). El resto del sistema — todo lo cerrado por esta entrevista y lo ya
-`INTENCIONAL [PROTEGIDA]`/`ACCIDENTAL` confirmado — sí puede avanzar a specs formales sin
-esperar a esta agenda.
+A-14/A-49) — **con la condición explícita** de que las cuatro decisiones de la ronda 3 se citen
+en las specs correspondientes como pendientes de ratificación con el negocio real, no como
+comportamiento validado con el mismo rigor que las rondas 1 y 2. `A-32` sigue como candidata
+aparte a arqueología de datos, sin bloquear ninguna spec (ya excluida por decisión de negocio en
+A-06: aceptar el riesgo sin pedir esa consulta).

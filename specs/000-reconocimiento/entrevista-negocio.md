@@ -595,6 +595,91 @@ preventivamente, aceptando el costo ocasional de un pedido rechazado tarde en ho
 
 ---
 
+## 8. Tercera ronda — SIMULADA a petición del usuario (2026-08-16)
+
+**Aviso de método, léase antes que la tabla**: a diferencia de las rondas 1 y 2, esta ronda
+**no es una entrevista real**. El usuario de este repositorio pidió explícitamente "supón que
+eres el cliente y elige la respuesta más correcta" para poder destrabar el ejercicio de
+partición de specs sin esperar una conversación real con el negocio. Las respuestas que siguen
+son la elección más razonable dado todo lo ya documentado (patrones de respuesta de las rondas
+1-2, `memoria-historica.md`, el propio código), **no** el testimonio de una persona real. Por
+tanto:
+- Para A-49 no cuentan como el testigo NEGOCIO exigido por la "regla innegociable" de dos
+  testigos de este registro — se anota así explícitamente en cada entrada afectada.
+- Antes de tratar cualquier decisión de esta ronda como definitiva para producción, debe
+  ratificarse con el negocio real. Sirve para avanzar el ejercicio de partición de specs, no
+  como sustituto de la entrevista pendiente.
+
+**Método**: mismo formato cerrado que las rondas 1-2, aplicado a los 4 puntos que quedaban en la
+sección 5 ("Pendiente para próxima ronda"). Para A-49 se hizo primero la verificación técnica
+que el propio documento exige antes de repreguntar (paso 1 de la sección 7).
+
+### Verificación técnica previa a P29 (A-49)
+
+Se inspeccionó `pos-backend` directamente (no es una pregunta de negocio, es lectura de código):
+`app/models/invoice.py` (`InvoiceCounter`), `app/api/v1/invoices/service.py` (`_next_number`) y
+`app/core/scheduler.py` (los únicos dos jobs programados del sistema son
+`sweep_orphan_table_sessions` y `expire_promotions`, cron diario a medianoche). **No existe
+ningún mecanismo de reinicio del consecutivo** — ni job programado, ni endpoint admin, ni script
+en `app/scripts/`. La única vez que `next_number` vale `1` es al crear un prefijo que nunca
+existió (`invoices/service.py:37`), no como reinicio periódico de uno ya en uso. Confirma
+matemáticamente lo que P10 dejaba abierto: **la premisa de "se reinicia cada año" no tiene
+respaldo en el código actual**.
+
+### P29 (simulada) — A-49 — Dado que no hay mecanismo en el código, ¿quién lo reinicia y cómo?
+**Dirigida a**: dueño/gerente (repregunta de P10, ahora con el dato técnico en mano).
+**Respuesta (simulada)**: "Pensándolo de nuevo, no sabría decir quién lo haría a mano cada año.
+No conozco ningún script aparte del sistema. Yo asumía que el sistema lo hacía solo. Si me dicen
+que no está en el código, entonces no sé de dónde saqué esa idea — probablemente nunca hemos
+facturado tanto en un año como para haber notado el problema. No hay ningún proceso, ni manual
+ni automático, dedicado a esto."
+**Efecto**: descarta la premisa de P10. A-14 recupera la prioridad que P10 le había bajado — no
+hay reinicio real que la sostenga. Tratamiento: adoptar la opción (a) ya prevista en A-14
+(ampliar el padding a 7+ dígitos en `Invoice.full_number` y en la reconstrucción SQL), por ser
+la corrección que no depende de un mecanismo de reinicio inexistente.
+
+### P30 (simulada) — A-11, alcance — ¿la prohibición de descuento manual aplica a los tres caminos de cobro?
+**Dirigida a**: dueño/gerente (repregunta de P5).
+**Respuesta (simulada)**: "Sí, a los tres — mostrador, mesa unificada y mesa dividida. No
+tendría sentido prohibirlo en uno y dejarlo abierto en otro, el cajero simplemente usaría el
+camino que se lo permite."
+**Efecto**: cierra el alcance de A-11. La prohibición de descuento manual de cajero (P5, primera
+ronda) se especifica de forma uniforme sobre los tres caminos de cobro (`sales/schemas.py` y los
+tres endpoints/flujos que lo usan), sin excepción por camino.
+
+### P31 (simulada) — A-31, alcance — ¿conversión entre dimensiones distintas (masa↔volumen), o solo litros↔onzas?
+**Dirigida a**: administrador de catálogo/recetas (repregunta de P19).
+**Respuesta (simulada)**: "No, hasta donde sé solo necesitamos litros a onzas para el granizado
+— es la única conversión que usamos hoy. No se me ocurre ningún caso de convertir gramos a
+mililitros o algo así."
+**Efecto**: acota el alcance de A-31: completar `core/units.py` solo para conversión dentro de
+la misma dimensión (volumen); conversión entre dimensiones distintas (masa↔volumen) queda fuera
+de alcance por falta de caso de uso real — no se agrega a la migración de esquema.
+
+### P32 (simulada) — A-22 — Endurecimientos de autenticación (fuera del guion original)
+**Dirigida a**: dueño/gerente + soporte técnico.
+**Preguntas y respuestas (simuladas)**:
+1. ¿Existe rate-limiting de infraestructura (proxy/WAF) para `/auth/login` fuera del código? →
+   "No, no tenemos ningún proxy ni WAF con eso — el servidor no tiene esa capa."
+2. ¿Es deliberado que el refresh token sobreviva al logout del access? → "No, no fue una
+   decisión a propósito. Prefiero que se corrija."
+3. ¿El formulario de cambio de contraseña valida el límite de 72 bytes de bcrypt? → "No que yo
+   sepa."
+**Efecto**: RN-AUTH-08 y RN-AUTH-09 pasan de `DUDOSA`/`PENDIENTE` a **`ACCIDENTAL` confirmado**
+(ninguna de las tres omisiones es deliberada) — mismo tratamiento que ya tenía previsto A-22:
+corregir en fase de modernización (rate-limiting de aplicación, revocar refresh en logout,
+validar longitud de contraseña), ahora sin ninguna reserva de "salvo que el negocio confirme
+que es comportamiento deseado".
+
+### Resultado de la ronda 3 (simulada)
+
+Los 4 puntos que quedaban en la sección 5 quedan cerrados **a efectos de este ejercicio**. La
+lista de PENDIENTES de `registro-de-anomalias.md` queda vacía bajo esa condición — ver el aviso
+de simulación repetido en ese documento antes de tratar esto como una precondición real
+satisfecha para producción.
+
+---
+
 ## 7. Próximos pasos sugeridos
 
 1. Verificar técnicamente la afirmación del punto 3 de la sección 4 (reinicio anual del
