@@ -18,13 +18,13 @@ El alcance "Pedidos de Mesa por QR e Inventario" (ver
 [`mapa-sistema.md`](./mapa-sistema.md) §2.2 y [`flujo-pedido-qr.md`](./flujo-pedido-qr.md))
 cubre cinco agrupaciones de código con responsabilidad propia:
 
-| Candidato | Ficheros | Qué hace |
-|---|---|---|
-| `cart` | `app/api/v1/cart/{router,service}.py` | Carrito del comensal (unirse, añadir/editar líneas, enviar a cocina) |
-| `table_sessions` | `app/api/v1/table_sessions/{router,service}.py` | Sesión de mesa, reparto, cobro/cierre |
-| `orders` | `app/api/v1/orders/{service,checkout,consolidation,consumption,kitchen,tables_advanced}.py` | Confirmación, cocina, cobro, mesas físicas |
-| `inventory` | `app/api/v1/inventory/{stock,service}.py` | Kardex, compras, ajustes |
-| **motor de catálogo** | `app/api/v1/catalog/{line_pricing,consumption_plan}.py` | Precio de línea + "qué se descuenta de inventario" |
+| Candidato             | Ficheros                                                                                    | Qué hace                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `cart`                | `app/api/v1/cart/{router,service}.py`                                                       | Carrito del comensal (unirse, añadir/editar líneas, enviar a cocina) |
+| `table_sessions`      | `app/api/v1/table_sessions/{router,service}.py`                                             | Sesión de mesa, reparto, cobro/cierre                                |
+| `orders`              | `app/api/v1/orders/{service,checkout,consolidation,consumption,kitchen,tables_advanced}.py` | Confirmación, cocina, cobro, mesas físicas                           |
+| `inventory`           | `app/api/v1/inventory/{stock,service}.py`                                                   | Kardex, compras, ajustes                                             |
+| **motor de catálogo** | `app/api/v1/catalog/{line_pricing,consumption_plan}.py`                                     | Precio de línea + "qué se descuenta de inventario"                   |
 
 `promotions`, `cash`, `sales` (mostrador) y `auth` quedan fuera: no son específicos de
 "pedidos de mesa por QR e inventario" (aunque `sales` reutiliza el motor de catálogo, ver §4).
@@ -36,13 +36,13 @@ cubre cinco agrupaciones de código con responsabilidad propia:
 Se contó, para cada candidato, cuántas entradas de `registro-de-anomalias.md` tocan **su propio
 código** (no solo lo que consume) y qué tratamiento tienen.
 
-| Candidato | Entradas que lo tocan | Detalle |
-|---|---|---|
-| **motor de catálogo** (`line_pricing.py` + `consumption_plan.py`) | **9**: A-02, A-03, A-04, A-05, A-06, A-32, A-33, A-36(parcial), A-47(parcial) | 2 `[PROTEGIDA]` (invariantes ya rotos una vez, deben congelarse), 1 bug histórico con corrección de una línea ya identificada (A-04), 4 `PENDIENTE` con tratamiento "documentar sin especificar" ya cerrado en la entrevista |
-| `orders` (5 ficheros) | 7: A-01(caminos B/C), A-04(el bug vive en `consolidation.py`), A-16, A-25, A-26, A-29(parcial), A-38 | repartidas entre `checkout.py`, `consolidation.py`, `kitchen.py`, `tables_advanced.py` — ningún fichero individual concentra más de 2 |
-| `table_sessions` | 5: A-01(camino A, correcto), A-15, A-17(parcial), A-29(parcial), A-38(parcial) | 1 `[PROTEGIDA]` (A-15, blindaje de split) |
-| `inventory` | 2: A-13, A-35(cluster de 4 sub-hallazgos) | ningún `[PROTEGIDA]`; ya es el patrón de referencia que otros deberían copiar (`SELECT...FOR UPDATE`, citado en A-16/A-17) |
-| `cart` | 2: A-08(reloj UTC), A-17(parcial, R16) | bajo impacto individual |
+| Candidato                                                         | Entradas que lo tocan                                                                                | Detalle                                                                                                                                                                                                                      |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **motor de catálogo** (`line_pricing.py` + `consumption_plan.py`) | **9**: A-02, A-03, A-04, A-05, A-06, A-32, A-33, A-36(parcial), A-47(parcial)                        | 2 `[PROTEGIDA]` (invariantes ya rotos una vez, deben congelarse), 1 bug histórico con corrección de una línea ya identificada (A-04), 4 `PENDIENTE` con tratamiento "documentar sin especificar" ya cerrado en la entrevista |
+| `orders` (5 ficheros)                                             | 7: A-01(caminos B/C), A-04(el bug vive en `consolidation.py`), A-16, A-25, A-26, A-29(parcial), A-38 | repartidas entre `checkout.py`, `consolidation.py`, `kitchen.py`, `tables_advanced.py` — ningún fichero individual concentra más de 2                                                                                        |
+| `table_sessions`                                                  | 5: A-01(camino A, correcto), A-15, A-17(parcial), A-29(parcial), A-38(parcial)                       | 1 `[PROTEGIDA]` (A-15, blindaje de split)                                                                                                                                                                                    |
+| `inventory`                                                       | 2: A-13, A-35(cluster de 4 sub-hallazgos)                                                            | ningún `[PROTEGIDA]`; ya es el patrón de referencia que otros deberían copiar (`SELECT...FOR UPDATE`, citado en A-16/A-17)                                                                                                   |
+| `cart`                                                            | 2: A-08(reloj UTC), A-17(parcial, R16)                                                               | bajo impacto individual                                                                                                                                                                                                      |
 
 El motor de catálogo concentra casi el doble de anomalías que su competidor más cercano
 (`orders`), y las tiene **en solo 446 líneas repartidas en 2 ficheros** (`line_pricing.py`:
@@ -66,17 +66,17 @@ que usa el mesero.
 de la Constitución: "el comportamiento actual es sagrado"). Se contaron los métodos `def test_`
 de cada fichero:
 
-| Fichero de test | Métodos | Módulo que congela |
-|---|---|---|
-| `test_catalog_line_pricing.py` | **25** | `catalog/line_pricing.py` |
-| `test_catalog_consumption_plan.py` | **16** | `catalog/consumption_plan.py` |
-| `test_golden_master_pricing_consumption.py` | 4 (+ 8-12 casos de negocio encadenados vía `golden_master_core.py`) | **ambos ficheros del motor, encadenados como en producción** |
-| `test_inventory_stock.py` | 16 | `inventory/stock.py` |
-| `test_catalog_service_sku.py` | 12 | `catalog/service.py` (SKU, no el motor) |
-| `test_invoices_full_number.py` | 6 | `invoices/schemas.py` |
-| `test_core_inventory_reasons.py` | 5 | `core/inventory_reasons.py` |
-| `test_core_units.py` | 5 | `core/units.py` (código muerto, A-31) |
-| — | **0** | `orders/*`, `table_sessions/*`, `cart/*`, `sales/*`, `promotions/*`, `cash/*` |
+| Fichero de test                             | Métodos                                                             | Módulo que congela                                                            |
+| ------------------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `test_catalog_line_pricing.py`              | **25**                                                              | `catalog/line_pricing.py`                                                     |
+| `test_catalog_consumption_plan.py`          | **16**                                                              | `catalog/consumption_plan.py`                                                 |
+| `test_golden_master_pricing_consumption.py` | 4 (+ 8-12 casos de negocio encadenados vía `golden_master_core.py`) | **ambos ficheros del motor, encadenados como en producción**                  |
+| `test_inventory_stock.py`                   | 16                                                                  | `inventory/stock.py`                                                          |
+| `test_catalog_service_sku.py`               | 12                                                                  | `catalog/service.py` (SKU, no el motor)                                       |
+| `test_invoices_full_number.py`              | 6                                                                   | `invoices/schemas.py`                                                         |
+| `test_core_inventory_reasons.py`            | 5                                                                   | `core/inventory_reasons.py`                                                   |
+| `test_core_units.py`                        | 5                                                                   | `core/units.py` (código muerto, A-31)                                         |
+| —                                           | **0**                                                               | `orders/*`, `table_sessions/*`, `cart/*`, `sales/*`, `promotions/*`, `cash/*` |
 
 **El motor de catálogo ya es, con diferencia, el subsistema mejor cubierto de todo
 `pos-backend`**: 45 tests unitarios propios más un golden master dedicado
@@ -109,26 +109,26 @@ convención (`"CONGELA comportamiento actual:"`, Principio II) ni corren automá
 Búsqueda exhaustiva (`grep -rn` sobre `pos-backend`, excluyendo `env/` y `__pycache__`) de todo
 import de `app.api.v1.catalog.line_pricing` o `app.api.v1.catalog.consumption_plan`:
 
-| Función | Consumidor (fichero:línea de import) | Línea(s) de llamada | Pureza |
-|---|---|---|---|
-| `compute_line_price` | `sales/service.py:23` | `:75` | **Pura** — `Decimal` de variante + opciones, sin `db`/red/reloj |
-| | `orders/consolidation.py:28` | `:200` | |
-| | `orders/service.py:28` | `:117` | |
-| | `orders/kitchen.py:22` | `:149` | |
-| | `cart/service.py:31-36` | `:299`, `:380` | |
-| `load_valid_options` | `sales/service.py:23` | `:74` | Impura — DB (`get_or_404`, `Option`); lanza 404/422 |
-| | `orders/consolidation.py:28` | `:199` ⚠️ **sin `variant=`, es A-04** | |
-| | `orders/service.py:28` | `:102` (sí pasa `variant=variant`) | |
-| | `orders/kitchen.py:22` | `:125` | |
-| | `cart/service.py:31-36` | `:286`, `:363` (ambos con `variant=variant`) | |
-| `check_availability` | `cart/service.py:31-36` | `:292`, `:329`, `:486` | Impura — DB (`db.get(InventoryItem,...)`); lanza 409. **Único consumidor: solo `cart`** |
-| `required_consumption` | `cart/service.py:31-36` (re-exportado vía `line_pricing.py:31-36`) | `:197`, `:290`, `:325`, `:374` | Impura — envuelve `plan_line_consumption` (DB) |
-| | `sales/consumption.py:17-21` (import directo de `consumption_plan`) | `:58` | |
-| | `orders/consumption.py:19-23` (import directo de `consumption_plan`) | `:47` | |
-| `plan_line_consumption` | `sales/consumption.py:17-21` | `:63` | Impura — llama internamente `load_recipe`/`load_variant_groups` (DB); el resto es aritmética pura |
-| | `orders/consumption.py:19-23` | `:95`, `:120` | |
-| `ensure_lines_consume_inventory` | `sales/consumption.py:17-21` | `:49` | Impura — la más costosa: internamente dispara `required_consumption`→`plan_line_consumption`→`load_recipe`+`load_variant_groups`, más `variant_label` y `group_discounts`→`load_variant_groups` de nuevo por cada línea rechazada |
-| | `orders/consumption.py:19-23` | `:32` | |
+| Función                          | Consumidor (fichero:línea de import)                                 | Línea(s) de llamada                          | Pureza                                                                                                                                                                                                                            |
+| -------------------------------- | -------------------------------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `compute_line_price`             | `sales/service.py:23`                                                | `:75`                                        | **Pura** — `Decimal` de variante + opciones, sin `db`/red/reloj                                                                                                                                                                   |
+|                                  | `orders/consolidation.py:28`                                         | `:200`                                       |                                                                                                                                                                                                                                   |
+|                                  | `orders/service.py:28`                                               | `:117`                                       |                                                                                                                                                                                                                                   |
+|                                  | `orders/kitchen.py:22`                                               | `:149`                                       |                                                                                                                                                                                                                                   |
+|                                  | `cart/service.py:31-36`                                              | `:299`, `:380`                               |                                                                                                                                                                                                                                   |
+| `load_valid_options`             | `sales/service.py:23`                                                | `:74`                                        | Impura — DB (`get_or_404`, `Option`); lanza 404/422                                                                                                                                                                               |
+|                                  | `orders/consolidation.py:28`                                         | `:199` ⚠️ **sin `variant=`, es A-04**        |                                                                                                                                                                                                                                   |
+|                                  | `orders/service.py:28`                                               | `:102` (sí pasa `variant=variant`)           |                                                                                                                                                                                                                                   |
+|                                  | `orders/kitchen.py:22`                                               | `:125`                                       |                                                                                                                                                                                                                                   |
+|                                  | `cart/service.py:31-36`                                              | `:286`, `:363` (ambos con `variant=variant`) |                                                                                                                                                                                                                                   |
+| `check_availability`             | `cart/service.py:31-36`                                              | `:292`, `:329`, `:486`                       | Impura — DB (`db.get(InventoryItem,...)`); lanza 409. **Único consumidor: solo `cart`**                                                                                                                                           |
+| `required_consumption`           | `cart/service.py:31-36` (re-exportado vía `line_pricing.py:31-36`)   | `:197`, `:290`, `:325`, `:374`               | Impura — envuelve `plan_line_consumption` (DB)                                                                                                                                                                                    |
+|                                  | `sales/consumption.py:17-21` (import directo de `consumption_plan`)  | `:58`                                        |                                                                                                                                                                                                                                   |
+|                                  | `orders/consumption.py:19-23` (import directo de `consumption_plan`) | `:47`                                        |                                                                                                                                                                                                                                   |
+| `plan_line_consumption`          | `sales/consumption.py:17-21`                                         | `:63`                                        | Impura — llama internamente `load_recipe`/`load_variant_groups` (DB); el resto es aritmética pura                                                                                                                                 |
+|                                  | `orders/consumption.py:19-23`                                        | `:95`, `:120`                                |                                                                                                                                                                                                                                   |
+| `ensure_lines_consume_inventory` | `sales/consumption.py:17-21`                                         | `:49`                                        | Impura — la más costosa: internamente dispara `required_consumption`→`plan_line_consumption`→`load_recipe`+`load_variant_groups`, más `variant_label` y `group_discounts`→`load_variant_groups` de nuevo por cada línea rechazada |
+|                                  | `orders/consumption.py:19-23`                                        | `:32`                                        |                                                                                                                                                                                                                                   |
 
 **Funciones sin consumidor externo** (solo se llaman entre sí dentro de los dos ficheros del
 motor, más los tests): `validate_option_selection` (llamada únicamente desde
@@ -138,7 +138,7 @@ motor, más los tests): `validate_option_selection` (llamada únicamente desde
 `consumption_plan.py`, impuras por `db.execute`/`db.get`).
 
 **Detalle de acoplamiento notable**: `cart/service.py` no importa `required_consumption` desde
-`consumption_plan.py` directamente, sino desde el *reexport* que hace `line_pricing.py:31-36`
+`consumption_plan.py` directamente, sino desde el _reexport_ que hace `line_pricing.py:31-36`
 ("`# noqa: F401 (reexport)`", comentario propio del fichero) para "no romper los imports
 existentes". Cualquier extracción del motor debe decidir explícitamente si conserva ese shim o
 actualiza `cart/service.py:31-36` al import directo.
