@@ -62,7 +62,7 @@ prevalece sobre el campo "Decisión de negocio pendiente" de la entrada correspo
 | A-01 | BUG A SECAS / BUG HISTÓRICO CON DEPENDIENTES | Sin cambio de clasificación — riesgo confirmado **latente, no activo** (no usan mesas fusionadas) | P1 |
 | A-04 | BUG HISTÓRICO CON DEPENDIENTES | Reforzada — **testimonio de negocio confirma merma real hace ~15 días** en sabores/toppings; sube prioridad | P4 |
 | A-05 | INTENCIONAL [PROTEGIDA], decisión pendiente | Decisión pendiente **cerrada**: catálogo nunca se depuró, `STRICT_OPTION_SELECTION` debe seguir en `False` | P18 |
-| A-09 | PENDIENTE | **Mitigado operativamente** — relojes de terminal verificados | P6 |
+| A-09 | PENDIENTE | Mitigado operativamente (P6) — **reabierta 2026-08-18**: corregir en modernización pese a la mitigación, ver spec 023 | P6 |
 | A-11 | ACCIDENTAL, tope a definir | Tratamiento **redefinido y más estricto**: el cajero no debe poder aplicar descuento manual en absoluto (no solo un tope) | P5 |
 | A-12 | ACCIDENTAL, alcance desconocido | **Alcance estimado**: 6-20 productos activos sin receta configurada; sube prioridad | P8 |
 | A-13 | PENDIENTE | **ACCIDENTAL confirmado** — insumos inactivos bajo mínimo deben seguir en las alertas | P9 |
@@ -362,6 +362,18 @@ promoción, en un terminal con reloj no verificado.
 respuesta confirma que los terminales no están verificados, la corrección natural (enviar
 `TENANT_TIMEZONE` al frontend y convertir) pasa a fase de modernización sin retroactividad
 (es solo previsualización).
+
+**Actualización — reapertura de la decisión (2026-08-18)**: la respuesta P6 (relojes
+verificados y fijados a `America/Bogota`) mitigó el riesgo operativamente, pero el defecto de
+diseño en el código quedó sin corregir, dependiente de que esa disciplina de configuración se
+mantenga en cada terminal presente y futuro — nadie la audita de forma continua. El
+propietario del repositorio (deimerhdz21@gmail.com), actuando como negocio, decide **reabrir**
+esta decisión y pasar el tratamiento de "mitigado operativamente, documentar sin especificar" a
+**corregir en modernización**, con el mismo criterio de riesgo latente ya aplicado a A-08 (spec
+022, corregida por contraste directo con A-07). Ver spec
+[023-correccion-zona-horaria-pos-staff](../023-correccion-zona-horaria-pos-staff/spec.md),
+que especifica la corrección sin tocar el motor de promociones del backend (A-07, protegido) ni
+el desempate del frontend (A-10, anomalía distinta).
 
 ### A-10 — El desempate de la "mejor promoción" en el frontend no replica el criterio real del backend (creado, no antigüedad)
 **Descripción**: el backend desempata promociones con el mismo `priority` y monto por
@@ -1262,7 +1274,7 @@ consignada aquí para que no se pierda al no tener una entrada `A-NN` propia.
 | A-06 | PENDIENTE | Documentar sin especificar | Ver A-05 |
 | A-07 | INTENCIONAL [PROTEGIDA] | Especificar tal cual | Ninguna (forense solamente) |
 | A-08 | ACCIDENTAL | Corregir en modernización | Ninguna |
-| A-09 | PENDIENTE | Documentar sin especificar | Reloj/zona de terminales verificados |
+| A-09 | PENDIENTE | ~~Documentar sin especificar~~ **Corregir en modernización** (reabierta 2026-08-18, spec 023) | Reloj/zona de terminales verificados |
 | A-10 | ACCIDENTAL | Documentar sin especificar | Ninguna en estado actual |
 | A-11 | ACCIDENTAL | Corregir en modernización, no retroactivo | Cerrada (ronda 3, simulada): prohibición total, en los tres caminos |
 | A-12 | ACCIDENTAL | Corregir en modernización, no retroactivo | Alcance del "agujero" (dato) |
