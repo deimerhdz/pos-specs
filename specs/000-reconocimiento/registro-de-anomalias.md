@@ -1167,6 +1167,17 @@ zonas horarias distintas.
 **Tratamiento acordado**: documentar sin especificar; corregir solo si/cuando el negocio
 confirme planes de multi-tenant multi-zona horaria.
 
+**Actualización (2026-08-24, spec 030)**: reabierta como parte de la corrección del defecto de
+Ventas (ver A-50). El propietario del repositorio (deimerhdz21@gmail.com) autorizó introducir la
+columna `Tenant.timezone` que el "Tratamiento acordado" original ya preveía como paso siguiente.
+`Tenant` gana `timezone` (`String`, `NOT NULL`, `server_default='America/Bogota'`, validada
+contra la base de datos IANA en cada escritura), fijada vía `app/scripts/set_tenant_timezone.py`
+(sin pantalla de autoservicio — Clarifications de spec 030). `promotions/service.py::_tz()` pasa
+a resolver la zona del tenant cuando el caller la tiene disponible, con `TENANT_TIMEZONE` como
+respaldo para callers que aún no la pasan — cambio aditivo, sin afectar el criterio de evaluación
+de A-07 (protegida). **Cerrada**: cada tenant puede configurarse con una zona horaria distinta a
+`America/Bogota` sin cambio de código.
+
 ### A-47 — El chequeo de disponibilidad de inventario es "best-effort": no reserva ni bloquea stock
 **Descripción**: pasar el chequeo de disponibilidad al armar el carrito no garantiza que el
 stock siga disponible al momento de confirmar/pagar; puede quedar obsoleto si otra venta
@@ -1246,6 +1257,48 @@ gestoría/contador si la creencia de "se reinicia cada año" (P10) tiene algún 
 del sistema que la verificación técnica no pueda ver (p. ej. un cambio de prefijo anual pactado
 con la gestoría en vez de un reinicio del contador). Responsable: por identificar.
 
+### A-50 — Ninguna capa de la API ni del frontend convierte los timestamps UTC a la hora del
+negocio antes de mostrarlos, y la medianoche de los filtros de fecha era la de UTC, no la del
+negocio
+
+**Descripción**: el módulo de Ventas mostraba una venta hecha a las `07:53` hora de Bogotá como
+`24/08/2026 12:49`/`12:53` — la hora UTC cruda del servidor, sin convertir. La investigación de
+spec 030 confirmó que el mismo patrón (columna `DateTime` sin zona, poblada en UTC por
+`server_default=func.now()` o `datetime.now(timezone.utc)`, servida sin conversión, mostrada tal
+cual por `DatePipe`/`toLocaleString` de Angular) afecta a las once entidades con instante
+absoluto del sistema (Venta, Orden, Pago, Turno de caja, Movimiento de caja, Arqueo parcial,
+Movimiento de inventario, Sesión de mesa, Factura, Compra, Auditoría) — no es un defecto aislado
+de una pantalla. Además, los filtros "Desde/Hasta/Hoy/Ayer" de Ventas y Reportes comparaban
+contra medianoche **UTC** en el backend (`sales/service.py`, `reports/service.py`) mientras
+Reportes calculaba "Hoy" en la hora **local del navegador** (`reports.service.ts`) — dos
+criterios de medianoche distintos, ninguno de los dos la medianoche real de Bogotá.
+- **CÓDIGO**: `sales/schemas.py:134` (`SaleResponse.sold_at`, sin offset antes de esta spec);
+  `sales-page.component.ts:108,155` (`| date` sin zona); `sales/service.py:190-216` y
+  `reports/service.py:1-27` (medianoche UTC implícita en el filtro); `reports.service.ts:250-279`
+  (`new Date()` del navegador para "Hoy"); ocho sitios de `datetime.now(timezone.utc)`
+  construidos de forma independiente en vez de un único mecanismo (`cash/router.py:121`,
+  `checkout.py:811/819/873/925/933`, `qr_context.py:85/179`, `table_sessions/service.py:177/652/739`).
+- **NEGOCIO**: defecto reportado directamente por el propietario del repositorio
+  (deimerhdz21@gmail.com) el 2026-08-24, con evidencia concreta (hora mostrada `12:49` vs. hora
+  real `07:53`).
+**Clasificación**: **BUG A SECAS confirmado** — verificado leyendo el código en ejecución
+(`pos-backend`, `pos-heladeria`) el mismo día del reporte; no requiere el estándar de dos
+testigos porque no hay ambigüedad de intención: ningún comentario ni decisión de diseño previa
+documentaba "mostrar la hora UTC cruda" como comportamiento deseado.
+**Depende de esto**: cualquier usuario (cajero, administrador, auditor) que use la hora mostrada
+de una venta, orden, pago, movimiento de caja/inventario, sesión de mesa, factura o compra para
+conciliar el día — incluye el cierre diario de caja y los reportes gerenciales, donde el
+criterio de medianoche incorrecto podía asociar una venta al día equivocado.
+**Tratamiento acordado**: corregido en spec
+[030-correccion-fechas-zona-horaria](../030-correccion-fechas-zona-horaria/spec.md) — mecanismo
+único de conversión por repo (`app/core/timezone.py` en backend, `TenantDatePipe` en frontend),
+sin tocar ningún valor histórico almacenado (Principio VII): la corrección es exclusivamente de
+serialización (offset UTC explícito, `UtcDatetime`), interpretación de filtros
+(`local_day_bounds_utc`) y presentación. Ver también la actualización de A-46 (zona horaria ahora
+configurable por tenant, con `America/Bogota` de respaldo).
+**Autorizado por**: propietario del repositorio (deimerhdz21@gmail.com), 2026-08-24 (ver spec.md
+→ "Autorización de negocio").
+
 ---
 
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
@@ -1312,10 +1365,11 @@ consignada aquí para que no se pierda al no tener una entrada `A-NN` propia.
 | A-43 | ACCIDENTAL | Corregir si aparece 2º llamador | Ninguna |
 | A-44 | ACCIDENTAL | Corregir en modernización | Ninguna |
 | A-45 | ACCIDENTAL | Corregir de inmediato | Ninguna |
-| A-46 | ACCIDENTAL | Documentar sin especificar | Planes multi-tenant multi-zona |
+| A-46 | ~~ACCIDENTAL~~ **Corregida** (reabierta 2026-08-24, spec 030) | ~~Documentar sin especificar~~ **`Tenant.timezone` configurable por tenant**, `America/Bogota` de respaldo | Cerrada — cada tenant puede tener su propia zona horaria sin cambio de código |
 | A-47 | PENDIENTE | Documentar sin especificar | Aceptación de "pedido rechazado tarde" en hora pico |
 | A-48 | PENDIENTE | Documentar sin especificar | Motivo del pivote KDS → terminal de mesas |
 | A-49 | BUG A SECAS confirmado (testigo NEGOCIO simulado) | Ampliar padding a 7+ dígitos (A-14 recupera prioridad) | Cerrada (ronda 3, simulada): no existe mecanismo de reinicio; pendiente de ratificación real |
+| A-50 | BUG A SECAS confirmado | Corregido en spec 030 — mecanismo único de conversión UTC→hora del negocio, sin tocar datos históricos | Ninguna (autorizado y corregido, 2026-08-24) |
 
 ---
 
