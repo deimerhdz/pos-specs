@@ -1,8 +1,8 @@
 # Implementation Plan: Recuperación y Cambio de Contraseña (Personal)
 
-**Branch**: `028-recuperacion-cambio-contrasena` | **Date**: 2026-08-24 | **Spec**: [spec.md](./spec.md)
+**Branch**: `031-recuperacion-cambio-contrasena` | **Date**: 2026-08-24 | **Spec**: [spec.md](./spec.md)
 
-**Input**: Feature specification from `/specs/028-recuperacion-cambio-contrasena/spec.md`
+**Input**: Feature specification from `/specs/031-recuperacion-cambio-contrasena/spec.md`
 
 ## Summary
 
@@ -110,7 +110,7 @@ Sin violaciones. La tabla de Complexity Tracking al final de este documento qued
 ### Documentation (this feature)
 
 ```text
-specs/028-recuperacion-cambio-contrasena/
+specs/031-recuperacion-cambio-contrasena/
 ├── plan.md              # Este fichero (/speckit-plan)
 ├── research.md          # Fase 0 (/speckit-plan) — decisiones técnicas y alternativas descartadas
 ├── data-model.md         # Fase 1 (/speckit-plan) — entidades, columnas, transiciones, migraciones

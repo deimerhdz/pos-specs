@@ -1,6 +1,6 @@
 # Feature Specification: Recuperación y Cambio de Contraseña (Personal)
 
-**Feature Branch**: `028-recuperacion-cambio-contrasena`
+**Feature Branch**: `031-recuperacion-cambio-contrasena`
 
 **Created**: 2026-08-24
 

@@ -1,6 +1,6 @@
 # Tasks: Recuperación y Cambio de Contraseña (Personal)
 
-**Input**: Design documents from `/specs/028-recuperacion-cambio-contrasena/`
+**Input**: Design documents from `/specs/031-recuperacion-cambio-contrasena/`
 
 **Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [research.md](./research.md),
 [data-model.md](./data-model.md), [contracts/](./contracts/), [quickstart.md](./quickstart.md)

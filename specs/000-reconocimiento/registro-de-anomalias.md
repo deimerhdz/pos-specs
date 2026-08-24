@@ -1299,19 +1299,19 @@ configurable por tenant, con `America/Bogota` de respaldo).
 **Autorizado por**: propietario del repositorio (deimerhdz21@gmail.com), 2026-08-24 (ver spec.md
 → "Autorización de negocio").
 
-### A-50 — [DECISIÓN DE NEGOCIO — spec 028] Tres cambios de comportamiento en autenticación de personal: longitud de contraseña, cierre de sesiones y correo de aviso tras cambio de contraseña
+### A-51 — [DECISIÓN DE NEGOCIO — spec 031] Tres cambios de comportamiento en autenticación de personal: longitud de contraseña, cierre de sesiones y correo de aviso tras cambio de contraseña
 **Qué cambia**: (1) la longitud válida de una contraseña nueva pasa de 6-128 caracteres
 (`RN-AUTH-01`/`RN-AUTH-09`, spec 001) a 8-12 caracteres, para toda contraseña fijada de aquí en
-adelante por cualquiera de los dos flujos de spec 028 (recuperación no autenticada o cambio
+adelante por cualquiera de los dos flujos de spec 031 (recuperación no autenticada o cambio
 autenticado); (2) un cambio de contraseña exitoso, por cualquiera de los dos flujos, ahora cierra
 las demás sesiones activas de la cuenta (hoy ningún cambio lo hace); (3) un cambio de contraseña
 exitoso ahora dispara un correo de aviso al titular de la cuenta (hoy ningún cambio lo hace).
 **Por qué cambia**: decisión de negocio dada como detalle numérico explícito en la solicitud que
-originó spec 028 — fortalecer la recuperación/cambio de contraseña del personal cajero/admin con
+originó spec 031 — fortalecer la recuperación/cambio de contraseña del personal cajero/admin con
 un flujo de recuperación por correo que hoy no existe, y endurecer el cambio autenticado ya
 existente (spec 001, User Story 3).
 **Quién tomó la decisión y cuándo**: Leonardo Gomez (leonardogomez306@gmail.com), 2026-08-24,
-durante la redacción de [`specs/028-recuperacion-cambio-contrasena/spec.md`](../028-recuperacion-cambio-contrasena/spec.md)
+durante la redacción de [`specs/031-recuperacion-cambio-contrasena/spec.md`](../031-recuperacion-cambio-contrasena/spec.md)
 (encabezado y sección Assumptions, "Cambio de comportamiento explícito #1/#2/#3").
 **Funcionalidades afectadas**: `POST /auth/change-password` (spec 001, User Story 3) y toda
 cuenta de personal (cajero/admin) con una contraseña ya existente de más de 12 caracteres, que
@@ -1322,7 +1322,7 @@ contraseñas ya guardadas). `RN-AUTH-01` (verificación de `current_password`) y
 se registra aquí porque el Principio II de la constitución exige que toda decisión de negocio que
 cambie un comportamiento existente quede en este registro, con independencia de su origen.
 **Tratamiento acordado**: implementar según
-[`specs/028-recuperacion-cambio-contrasena/plan.md`](../028-recuperacion-cambio-contrasena/plan.md)/[`tasks.md`](../028-recuperacion-cambio-contrasena/tasks.md).
+[`specs/031-recuperacion-cambio-contrasena/plan.md`](../031-recuperacion-cambio-contrasena/plan.md)/[`tasks.md`](../031-recuperacion-cambio-contrasena/tasks.md).
 Sin reserva pendiente — los tres cambios están completamente especificados en `spec.md` (FR-019,
 FR-009/FR-017, FR-022).
 
