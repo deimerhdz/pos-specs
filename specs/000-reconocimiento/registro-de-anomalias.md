@@ -1397,6 +1397,7 @@ consignada aquí para que no se pierda al no tener una entrada `A-NN` propia.
 | A-48 | PENDIENTE | Documentar sin especificar | Motivo del pivote KDS → terminal de mesas |
 | A-49 | BUG A SECAS confirmado (testigo NEGOCIO simulado) | Ampliar padding a 7+ dígitos (A-14 recupera prioridad) | Cerrada (ronda 3, simulada): no existe mecanismo de reinicio; pendiente de ratificación real |
 | A-50 | BUG A SECAS confirmado | Corregido en spec 030 — mecanismo único de conversión UTC→hora del negocio, sin tocar datos históricos | Ninguna (autorizado y corregido, 2026-08-24) |
+| A-51 | DECISIÓN DE NEGOCIO | Implementado en spec 031 — longitud de contraseña 8-12, cierre de sesiones y correo de aviso tras cambio de contraseña | Ninguna |
 
 ---
 
