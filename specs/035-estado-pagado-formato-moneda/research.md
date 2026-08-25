@@ -2,24 +2,37 @@
 
 ## Decisión 1 — Dónde fijar `status = 'pagada'`
 
-**Decisión**: agregar `order.status = "pagada"` dentro de
-`checkout.checkout_and_send` (`pos-backend/app/api/v1/orders/checkout.py:421-505`), justo
-después de `_deduct_and_open(db, order, cashier)` (línea 490), en la misma transacción que ya
-crea la `Sale` vía `build_sale` (línea 471). **No** se modifica `_deduct_and_open` en sí
-(sigue fijando `'abierta'` para sus otros dos llamadores).
+**Decisión** *(ampliada 2026-08-25 — ver más abajo "Corrección tras implementar")*: agregar
+`order.status = "pagada"` en los tres puntos donde se construye una `Sale` sin dejar el
+pedido en `'pagada'`, todos en `pos-backend/app/api/v1/orders/checkout.py`:
+`checkout_and_send` (línea ~490, justo después de `_deduct_and_open`), y
+`approve_payment_attempt`/`confirm_cash_payment_attempt` (justo después de su respectivo
+`build_sale(...)`, antes del `db.commit()`). **No** se modifica `_deduct_and_open` ni
+`_confirm_order_impl` en sí — siguen fijando únicamente `'abierta'`, porque los reusa también
+`confirm_order` (vía de recuperación manual), que no construye ninguna `Sale`.
 
-**Justificación**: `_deduct_and_open` es una función compartida por tres caminos
-(`checkout_and_send`, y — vía `_confirm_order_impl` — `confirm_order` y las confirmaciones de
-pago QR, `approve_payment_attempt`/`confirm_cash_payment_attempt`). Solo en
-`checkout_and_send` existe ya una `Sale` en el momento en que se llama a
-`_deduct_and_open`: los otros dos caminos confirman el pedido hacia cocina **antes** de que
-exista cualquier venta (el comensal QR paga o transfiere, pero la `Sale` real se crea después,
-al cerrar la sesión de mesa — `close_session`). Si `_deduct_and_open` fijara `'pagada'` de
-forma genérica, marcaría como pagados pedidos QR que todavía no tienen ninguna venta.
+**Justificación**: `_deduct_and_open` es una función compartida por tres llamadores
+(`checkout_and_send`, y — vía `_confirm_order_impl` — `confirm_order`,
+`approve_payment_attempt` y `confirm_cash_payment_attempt`). De esos, `confirm_order` es el
+único que **no** construye ninguna `Sale` en la misma llamada — los otros tres sí (spec 028).
+Fijar `status = 'pagada'` en cada uno de esos tres puntos, después de su propio `build_sale`,
+evita marcar como pagado un pedido que todavía no tiene ninguna venta (el único caso real:
+`confirm_order`).
 
-Los otros dos caminos que sí crean una `Sale` (`checkout.pay_order:295` y
+Los otros dos caminos que también crean una `Sale` (`checkout.pay_order:295` y
 `table_sessions.service.close_session:~284`) **ya** fijan `status = 'pagada'` hoy — no
-requieren cambio. El único hueco real es `checkout_and_send`.
+requieren cambio.
+
+**Corrección tras implementar (2026-08-25)**: la primera versión de esta decisión solo cubría
+`checkout_and_send`, asumiendo — incorrectamente — que el camino QR
+(`approve_payment_attempt`/`confirm_cash_payment_attempt`) no generaba ninguna `Sale` hasta
+cerrar la sesión de mesa. El negocio reportó el mismo síntoma para un pedido QR ya aprobado
+por el cajero, lo que llevó a releer `checkout.py` con más cuidado: ambas funciones **ya**
+construyen la `Sale` en su propia llamada desde spec 028 (ver su docstring, que lo explica
+explícitamente) — el hueco real estaba ahí también, no solo en `checkout_and_send`. El propio
+`table_sessions/service.py:_billable_orders` ya documentaba este hecho en su comentario
+("evita facturar dos veces un pedido QR que ya se cobró al aprobar/confirmar su pago, aunque
+su `status` siga en `'abierta'`") — una señal que la investigación original pasó por alto.
 
 **Alternativas consideradas**:
 - **Modificar `_deduct_and_open` para que reciba un parámetro `mark_paid: bool`**: técnicamente
@@ -33,16 +46,41 @@ requieren cambio. El único hueco real es `checkout_and_send`.
 
 ## Decisión 2 — Cómo proteger una mesa con comida sin terminar tras el cobro
 
-**Decisión**: en `orders/tables_advanced.py`, la condición de "esta orden todavía bloquea la
-mesa" deja de ser `status not in ('pagada', 'cancelada')` y pasa a ser: `status != 'cancelada'
-AND (status != 'pagada' OR existe algún OrderItem de la orden con estado_cocina NOT IN
-('listo', 'anulado'))`. Se aplica en los tres puntos que hoy comparan contra `TERMINAL`:
-- `_active_orders_on_table` (línea 23-29): se agrega un `EXISTS` correlacionado contra
-  `order_items` para el caso `status = 'pagada'`.
-- `move_order`, chequeo de la orden que se mueve (línea 49): mismo predicado, evaluado en
-  Python sobre la orden ya cargada (con sus `items`).
-- `merge_orders`, chequeo de las órdenes a fusionar (línea 83): igual, en Python sobre las
-  órdenes ya cargadas.
+**Decisión**: en `orders/tables_advanced.py`, la condición de "esta orden todavía bloquea"
+**no** es una sola — son dos predicados distintos, porque el `TERMINAL = ('pagada',
+'cancelada')` original se usaba con dos sentidos opuestos que solo coincidían por
+casualidad (ambos ceden en `'pagada'`/`'cancelada'`, pero por razones distintas):
+
+- **`_table_occupied_by_order(order)`** — ¿esta orden hace que su mesa cuente como "con
+  trabajo pendiente"? Usado por `_active_orders_on_table` (línea 23-29, que a su vez
+  alimenta `set_table_status` y los chequeos de mesa destino/origen de `move_order`).
+  `'cancelada'` nunca ocupa la mesa; `'pagada'` deja de ocupar la mesa solo si no le quedan
+  ítems `EN_CURSO`; cualquier otro estado siempre la ocupa.
+- **`_order_locked_for_move_or_merge(order)`** — ¿esta orden **específica** no se puede
+  mover/fusionar todavía? Usado por el chequeo propio de `move_order` (línea 49, sobre la
+  orden que se mueve) y de `merge_orders` (línea 83, sobre las órdenes a fusionar).
+  `'cancelada'` **siempre** lo impide (a diferencia del predicado anterior — no tiene sentido
+  administrativo mover/fusionar una orden ya cancelada, aunque no "ocupe" la mesa); un estado
+  no-terminal **nunca** lo impide (a diferencia del predicado anterior — siempre fue movible
+  antes de esta spec); `'pagada'` lo impide solo si le quedan ítems `EN_CURSO`.
+
+Ambos predicados comparten la misma pregunta de fondo para el caso `'pagada'` (¿le quedan
+ítems `EN_CURSO`, `models/order_item.py`?, factorizada en `_has_pending_kitchen_work`), pero
+difieren en cómo tratan `'cancelada'` y los estados no-terminales — de ahí que **no** se
+pudieran unificar en un único booleano sin invertir alguno de los dos usos (se intentó primero
+con un solo predicado reutilizado con `not` en `move_order`/`merge_orders`; el test nuevo de
+T008 lo detectó de inmediato: una orden `'pagada'` con un ítem `'pendiente'` dejaba mover la
+orden en vez de bloquearlo, porque el predicado único devolvía `True` para "ocupa la mesa" y
+`not True` = `False` no bloqueaba el movimiento — la corrección fue separar los dos
+predicados).
+
+`_active_orders_on_table` pasó de una consulta SQL con `.notin_(TERMINAL)` a cargar las
+órdenes de la mesa con sus ítems (`selectinload(CustomerOrder.items)`) y filtrar en Python con
+`_table_occupied_by_order` — se prefirió sobre una `EXISTS` correlacionada en SQL porque el
+resto del archivo y del módulo (`checkout.py:97-102`, `kitchen.py:83`,
+`table_sessions/service.py:232,566`) ya resuelve "¿tiene ítems `EN_CURSO`?" en Python sobre la
+colección `order.items`, nunca con una subconsulta SQL — consistente con la convención ya
+establecida en vez de introducir una forma nueva.
 
 `group_bill` (línea 94-125) **no** se toca — su exclusión de órdenes `pagada`/`cancelada` del
 total es una decisión distinta y ya correcta (spec 019/017): una orden pagada no debe
@@ -73,6 +111,41 @@ con ítems pendientes) se cubre con un test adicional, no con la edición de uno
 - **No proteger este caso y aceptar el riesgo**: era la Opción B presentada al negocio en la
   fase de `/speckit-specify`; se descartó explícitamente en Clarifications (sesión
   2026-08-25, Q1: A).
+
+## Decisión 2a — La misma protección, también en el frontend (descubierta al ampliar Decisión 1)
+
+**Decisión**: en `pos-heladeria/src/app/modules/tables/services/pos-terminal.store.ts`, los
+`computed`/métodos `activeOrders` y `tableOrders` dejan de excluir toda orden
+`status === 'pagada'` sin condición — igual que en el backend (Decisión 2), una orden
+`'pagada'` con ítems `estado_cocina` en `EN_CURSO`/`KITCHEN_NOT_READY` (`'pendiente'` |
+`'en_preparacion'`) sigue contando como consumo vivo de la mesa. Se agrega
+`hasPendingKitchenWork` en `src/app/modules/orders/order-status.util.ts` (junto a
+`KITCHEN_NOT_READY`, que ya vivía ahí) para no duplicar el criterio en el store.
+
+**Justificación**: al ampliar la Decisión 1 para cubrir también `approve_payment_attempt`/
+`confirm_cash_payment_attempt` (ver Decisión 1, "Corrección tras implementar"), se releyó
+`pos-terminal.store.ts` y se encontró que tiene su **propio** criterio independiente de "esta
+mesa todavía tiene consumo activo" — no llama a ningún endpoint del backend para decidirlo,
+lo calcula localmente sobre los pedidos ya cargados. Ese criterio tenía exactamente el mismo
+patrón que `_active_orders_on_table` tenía antes de la Decisión 2 (`status !== 'pagada'`, sin
+mirar cocina). Sin corregirlo también aquí, una orden que pasara a `'pagada'` por el fix de
+Decisión 1 mientras cocina la sigue preparando habría hecho que `tableOrders(tableId)`
+quedara vacío para esa mesa, y `centralState`/`deriveTableStatus` la habrían mostrado como
+`'mesa-libre'`/sin consumo en el tablero del cajero — el mismo problema de Decisión 2, pero
+del lado del frontend y sin ningún endpoint de por medio que lo hubiera evitado.
+
+`deriveTableStatus` (mismo archivo) no necesitó cambios de lógica — ya usa `order.paid`, no
+`status`, para decidir `'listo'` vs `'pago_pendiente'` (comentario propio, citando D2 de spec
+029) — pero su comentario sí se corrigió: afirmaba que "los caminos QR/mostrador nunca llegan
+a `status === 'pagada'`", ya no es cierto tras esta spec.
+
+**Alternativas consideradas**:
+- **No corregir el frontend, confiar en que `paid` ya es la señal correcta ahí también**: se
+  descarta — es precisamente el error que llevó a este hallazgo: `paid` es la señal correcta
+  para *mostrar* "Pagada" (`displayOrderStatus`), pero `activeOrders`/`tableOrders` no
+  preguntan "¿está pagado?", preguntan "¿la mesa todavía tiene algo pendiente?" — dos
+  preguntas distintas que antes coincidían por accidente (ninguna orden llegaba a `'pagada'`
+  mientras cocinaba) y dejaron de coincidir en cuanto Decisión 1 corrigió `status`.
 
 ## Decisión 3 — Diseño del componente de moneda reutilizable
 

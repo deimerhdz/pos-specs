@@ -21,7 +21,16 @@ endpoint — este es el contrato de su interfaz pública (`@Input`/`@Output`/com
 |---|---|---|---|
 | `decimals` | `number` | `0` | Cantidad de decimales que el campo admite (ver `research.md`, Decisión 3). `0` = solo pesos enteros, igual que `formatMoney` hoy. |
 | `placeholder` | `string` | `'0'` | Igual que el `placeholder` nativo de un `<input>`. |
+| `bordered` | `boolean` | `true` | `false` cuando un contenedor padre ya pone el borde (ej. una caja con el `$` como prefijo fuera del propio `<input>`, patrón ya usado en `product-form.component.ts`) — evita un doble borde. Descubierto durante la migración de T015. |
+| `invalid` | `boolean` | `false` | Mismo propósito que en `password-input`/`searchable-select`: colorea el borde en rojo cuando el formulario que lo envuelve lo marca inválido. |
+| `sizeClass` | `string` | `'px-3 py-2.5 rounded-xl text-sm'` | Clases de tamaño/padding, igual que en `password-input`. |
 | `disabled` | — | — | No es un `@Input` propio: se controla vía `[disabled]` de Reactive Forms o `disabled` del `FormControl`, como cualquier `ControlValueAccessor`. |
+
+## `@Output`s
+
+| Output | Tipo | Descripción |
+|---|---|---|
+| `blurred` | `EventEmitter<void>` | Se emite cuando el `<input>` interno pierde el foco. Necesario porque el evento nativo `blur` no burbujea hasta el host de un componente — un `(blur)` puesto directamente sobre `<app-money-input>` nunca dispararía por sí solo. Descubierto durante la migración de T019 (un campo de `promotions-page.component.ts` necesitaba marcar "tocado" al perder el foco). |
 
 ## Contrato de valor (`ControlValueAccessor`)
 

@@ -59,52 +59,52 @@ liberar/mover/fusionar su mesa debe seguir respondiendo 409; una vez todos los �
 
 ### Implementación de la Historia 1
 
-- [ ] T001 [US1] Registrar la decisión de negocio en
+- [X] T001 [US1] Registrar la decisión de negocio en
   `specs/000-reconocimiento/registro-de-anomalias.md`: qué cambia (`checkout_and_send` pasa a
   fijar `status = 'pagada'`, revirtiendo para este camino puntual la decisión de spec 029),
   por qué, quién y cuándo lo autoriza, y qué funcionalidades quedan afectadas (las tres
   funciones de `tables_advanced.py` de T004-T006). Bloqueante por Principio II — ningún
   cambio de código de esta historia se implementa antes de esta entrada.
-- [ ] T002 [P] [US1] En
+- [X] T002 [P] [US1] En
   `pos-backend/app/api/v1/orders/checkout.py`, función `checkout_and_send` (líneas 421-505),
   agregar `order.status = "pagada"` inmediatamente después de la llamada a
   `_deduct_and_open(db, order, cashier)` (línea 490) — en la misma transacción, antes del
   `db.commit()`. No se modifica `_deduct_and_open` en sí (research.md, Decisión 1). (depende
   de T001)
-- [ ] T003 [P] [US1] En `pos-backend/app/api/v1/orders/tables_advanced.py`, agregar una
+- [X] T003 [P] [US1] En `pos-backend/app/api/v1/orders/tables_advanced.py`, agregar una
   función privada nueva (ej. `_order_blocks_table(db, order) -> bool` para uso en Python
   sobre una orden ya cargada, o su expresión SQL equivalente) que implemente el predicado de
   `research.md` Decisión 2: `status != 'cancelada' AND (status != 'pagada' OR existe algún
   OrderItem de la orden con estado_cocina NOT IN ('listo', 'anulado'))`. (depende de T001)
-- [ ] T004 [US1] En `tables_advanced.py`, actualizar `_active_orders_on_table` (líneas 23-29)
+- [X] T004 [US1] En `tables_advanced.py`, actualizar `_active_orders_on_table` (líneas 23-29)
   para usar la condición de T003 en vez de `status.notin_(TERMINAL)` — agregar el `EXISTS`
   correlacionado contra `order_items` para el caso `status = 'pagada'`. (depende de T003)
-- [ ] T005 [US1] En `tables_advanced.py`, actualizar el chequeo de la orden que se mueve en
+- [X] T005 [US1] En `tables_advanced.py`, actualizar el chequeo de la orden que se mueve en
   `move_order` (línea 49, hoy `if order.status in TERMINAL`) para usar el predicado de T003
   sobre la orden ya cargada (con sus `items`). (depende de T003)
-- [ ] T006 [US1] En `tables_advanced.py`, actualizar el chequeo de las órdenes a fusionar en
+- [X] T006 [US1] En `tables_advanced.py`, actualizar el chequeo de las órdenes a fusionar en
   `merge_orders` (línea 83, hoy `if any(o.status in TERMINAL for o in orders)`) para usar el
   predicado de T003 sobre cada orden ya cargada. `group_bill` (líneas 94-125) **no** se toca
   — su exclusión de `pagada`/`cancelada` del total ya es correcta y no depende de esta spec.
   (depende de T003)
-- [ ] T007 [P] [US1] Actualizar la aserción de
+- [X] T007 [P] [US1] Actualizar la aserción de
   `app/characterization_tests/test_orders_checkout.py::test_checkout_and_send_cobra_descuenta_y_abre_a_cocina`
   (línea 566) de `self.assertEqual(order.status, "abierta")` a
   `self.assertEqual(order.status, "pagada")`. No es un test `"CONGELA comportamiento
   actual:"` (su docstring dice "Comportamiento nuevo, spec 028") — actualizarlo no requiere
   el procedimiento del Principio III, solo reflejar el comportamiento que esta spec autoriza.
   (depende de T002)
-- [ ] T008 [P] [US1] Agregar un test nuevo en
+- [X] T008 [P] [US1] Agregar un test nuevo en
   `app/characterization_tests/test_orders_tables_advanced.py`: una orden `'pagada'` (creada
   vía `checkout_and_send` o fijada directamente) con al menos un `OrderItem` en
   `estado_cocina='pendiente'` → `set_table_status(..., 'libre')`, `move_order`, y
   `merge_orders` siguen respondiendo `409` (Acceptance Scenario 3 de Historia 1). (depende de
   T004, T005, T006)
-- [ ] T009 [US1] Agregar un test nuevo en el mismo archivo: la misma orden `'pagada'` con
+- [X] T009 [US1] Agregar un test nuevo en el mismo archivo: la misma orden `'pagada'` con
   **todos** sus ítems en `estado_cocina IN ('listo', 'anulado')` → las tres operaciones ahora
   se permiten (Escenario 2, paso 3 de `quickstart.md`). Mismo archivo que T008 — secuencial.
   (depende de T004, T005, T006)
-- [ ] T010 [US1] Correr
+- [X] T010 [US1] Correr
   `python -m unittest app.characterization_tests.test_orders_tables_advanced app.characterization_tests.test_orders_checkout -v`
   y confirmar que **ningún** test `"CONGELA comportamiento actual:"` requirió modificación
   (research.md, Decisión 2, ya verificó por lectura que
@@ -128,7 +128,7 @@ siendo el número correcto sin el separador.
 
 ### Implementación de la Historia 2
 
-- [ ] T011 [US2] Crear
+- [X] T011 [US2] Crear
   `pos-heladeria/src/app/shared/money-input/money-input.component.ts`: componente standalone,
   `ControlValueAccessor` auto-inyectando `NgControl` en el constructor (mismo patrón que
   `shared/password-input/password-input.component.ts` y
@@ -138,44 +138,44 @@ siendo el número correcto sin el separador.
   `number | null` limpio (nunca la cadena formateada), `null`/`undefined` deja el campo
   vacío sin forzarlo a `0` (FR-009). Ver `contracts/money-input-component.md` para el
   contrato completo.
-- [ ] T012 [P] [US2] Migrar "Fondo inicial (base de efectivo)" en
+- [X] T012 [P] [US2] Migrar "Fondo inicial (base de efectivo)" en
   `pos-heladeria/src/app/modules/cash-register/components/cash-open.component.ts:76-87` de
   `<input type="number">` a `<app-money-input>`. (depende de T011)
-- [ ] T013 [P] [US2] Migrar el campo "Valor" en
+- [X] T013 [P] [US2] Migrar el campo "Valor" en
   `pos-heladeria/src/app/modules/cash-register/components/cash-movement-modal.component.ts:39-49`
   a `<app-money-input>`. (depende de T011)
-- [ ] T014 [P] [US2] Migrar "Efectivo contado" (arqueo parcial) en
+- [X] T014 [P] [US2] Migrar "Efectivo contado" (arqueo parcial) en
   `pos-heladeria/src/app/modules/cash-register/components/cash-dashboard.component.ts:172` a
   `<app-money-input>`. (depende de T011)
-- [ ] T015 [P] [US2] Migrar el precio por presentación/variante en
+- [X] T015 [P] [US2] Migrar el precio por presentación/variante en
   `pos-heladeria/src/app/modules/products/pages/product-form.component.ts:230-232` a
   `<app-money-input>`. (depende de T011)
-- [ ] T016 [P] [US2] Migrar "Precio extra" en
+- [X] T016 [P] [US2] Migrar "Precio extra" en
   `pos-heladeria/src/app/modules/option-groups/components/option-form.component.ts:47-49` a
   `<app-money-input [decimals]="2">` (hoy admite centavos, `step="0.01"`). (depende de T011)
-- [ ] T017 [P] [US2] Migrar "Costo unitario" en
+- [X] T017 [P] [US2] Migrar "Costo unitario" en
   `pos-heladeria/src/app/modules/inventory/components/inventory-item-form.component.ts:82-84`
   a `<app-money-input [decimals]="2">`. (depende de T011)
-- [ ] T018 [P] [US2] Migrar "Costo unit." por línea de compra en
+- [X] T018 [P] [US2] Migrar "Costo unit." por línea de compra en
   `pos-heladeria/src/app/modules/inventory/components/purchase-form.component.ts:84-86` a
   `<app-money-input [decimals]="2">`. (depende de T011)
-- [ ] T019 [P] [US2] Migrar en
+- [X] T019 [P] [US2] Migrar en
   `pos-heladeria/src/app/modules/promotions/pages/promotions-page.component.ts`: "Precio del
   combo" (líneas 737 y 983) siempre a `<app-money-input>`; el campo dual porcentaje/monto
   (líneas 463 y 757) a `<app-money-input>` únicamente cuando `form.type !== 'percent'` (FR-011
   — cuando es porcentaje, se conserva el `<input type="number">` simple ya existente).
   (depende de T011)
-- [ ] T020 [P] [US2] Migrar el precio de paquete en
+- [X] T020 [P] [US2] Migrar el precio de paquete en
   `pos-heladeria/src/app/modules/promotions/components/scope-picker.component.ts:305-314` a
   `<app-money-input>`, preservando que dejarlo vacío siga significando "hereda el valor por
   defecto del paquete" (FR-009 — no forzar a `0`). (depende de T011)
-- [ ] T021 [P] [US2] Migrar el monto que paga el comensal en
+- [X] T021 [P] [US2] Migrar el monto que paga el comensal en
   `pos-heladeria/src/app/modules/tables/components/payment-input.component.ts:51-58,85-92` a
   `<app-money-input>`. (depende de T011)
-- [ ] T022 [P] [US2] Migrar "Monto recibido" en
+- [X] T022 [P] [US2] Migrar "Monto recibido" en
   `pos-heladeria/src/app/modules/tables/components/payment-attempt-review-panel.component.ts:46-53`
   a `<app-money-input>`. (depende de T011)
-- [ ] T023 [P] [US2] Migrar "Precio mensual"/"Precio anual" en
+- [X] T023 [P] [US2] Migrar "Precio mensual"/"Precio anual" en
   `pos-heladeria/src/app/modules/super-admin/components/plan-form.component.ts:107-129` a
   `<app-money-input [decimals]="2">` (dos campos). (depende de T011)
 
@@ -190,14 +190,69 @@ independiente.
 **Propósito**: validar el conjunto y confirmar que no hay regresiones fuera del alcance de
 esta spec.
 
-- [ ] T024 [P] Correr `cd pos-heladeria && npx ng build` y confirmar que compila limpio tras
+- [X] T024 [P] Correr `cd pos-heladeria && npx ng build` y confirmar que compila limpio tras
   la migración completa de Historia 2 (sin referencias sueltas al `<input type="number">`
-  original en los 9 archivos migrados).
-- [ ] T025 [P] Correr la suite completa de characterization tests de `orders`/`table_sessions`
+  original en los 12 archivos migrados).
+- [X] T025 [P] Correr la suite completa de characterization tests de `orders`/`table_sessions`
   en `pos-backend` (no solo los dos archivos de T010) y confirmar que no hay regresiones
-  fuera de las ya esperadas en T007-T009.
+  fuera de las ya esperadas en T007-T009. Los 385 tests de
+  `python -m unittest discover -s app/characterization_tests -p "test_*.py"` pasan. Los
+  scripts autoejecutables `test_variant_option_groups` y `test_receta_obligatoria` fallan,
+  pero se confirmó con `git stash` que ya fallaban igual antes de esta spec (datos de prueba
+  preexistentes en la base compartida, no relacionado) — no son regresiones.
 - [ ] T026 Ejecutar los 4 escenarios de `quickstart.md` completos contra un entorno local
-  (`pos-backend` + `pos-heladeria` corriendo).
+  (`pos-backend` + `pos-heladeria` corriendo). **Pendiente de verificación manual en
+  navegador** — igual que en spec 034, este agente no tiene acceso de red a los servidores
+  (`fastapi dev` PID 156328, `ng serve` PID 145780) que ya tienes corriendo con hot-reload;
+  ambos ya deberían reflejar todos los cambios de esta spec. Backend verificado por completo
+  vía tests automatizados (T007-T010, T025); frontend verificado por `ng build` limpio
+  (T024) pero no por click-through real.
+
+---
+
+## Fase 5: Corrección de seguimiento (2026-08-25) — alcance ampliado de Historia 1
+
+**Propósito**: el negocio reportó, después de T001-T026, que un pedido **QR** (no de Terminal
+de Mesas) seguía en `status: "abierta"` con `paid: true` tras aprobarse su pago. La
+investigación reveló que `approve_payment_attempt`/`confirm_cash_payment_attempt` (spec 028)
+también generan una `Sale` en su propia llamada — el hallazgo original de `research.md`
+(Decisión 1) que asumía lo contrario estaba mal. Ver `spec.md`, sección "Corrección
+2026-08-25", FR-002 (corregida) y FR-003a (nueva).
+
+- [X] T027 [P] [US1] Corregir `approve_payment_attempt` en
+  `pos-backend/app/api/v1/orders/checkout.py`: fijar `order.status = "pagada"` justo después
+  de su `build_sale(...)`, antes del `db.commit()` — mismo patrón que T002.
+- [X] T028 [P] [US1] Corregir `confirm_cash_payment_attempt` en el mismo archivo: mismo fix,
+  después de su propio `build_sale(...)`. (mismo archivo que T027 — secuencial entre sí)
+- [X] T029 [US1] Actualizar las 6 aserciones no-CONGELA en
+  `app/characterization_tests/test_orders_payment_gate.py` que dependían del `status`
+  resultante de aprobar/confirmar un pago QR, de `"abierta"` a `"pagada"` — dejando sin tocar
+  la única que ejercita el camino de recuperación `confirm_order` **sin** pasar por
+  aprobar/confirmar (esa sigue en `"abierta"`, correctamente, porque no genera ninguna venta).
+  (depende de T027, T028)
+- [X] T030 [P] [US1] Agregar `hasPendingKitchenWork` en
+  `pos-heladeria/src/app/modules/orders/order-status.util.ts` (junto a `KITCHEN_NOT_READY`) y
+  usarlo en `PosTerminalStore.activeOrders`/`tableOrders`
+  (`pos-heladeria/src/app/modules/tables/services/pos-terminal.store.ts`) para que una mesa
+  con un pedido ya `'pagada'` pero con ítems todavía sin terminar de preparar siga contando
+  como consumo activo en el tablero de la Terminal de Mesas (FR-003a) — el mismo criterio de
+  T003-T006, pero del lado del frontend, que tiene su propio filtro independiente.
+  Corregidos también los comentarios desactualizados de `deriveTableStatus`
+  (`pos-terminal.store.ts`) y `displayOrderStatus` (`order-status.util.ts`), que afirmaban que
+  el camino QR/mostrador "nunca llega a `status === 'pagada'`" — ya no es cierto.
+  Sin cambio de lógica en `deriveTableStatus`: ya usaba `order.paid`, no `status`.
+- [X] T031 [US1] Correr de nuevo la suite completa de characterization tests
+  (`python -m unittest discover -s app/characterization_tests -p "test_*.py"`) — 385 tests,
+  sigue en verde. (depende de T027, T028, T029)
+- [X] T032 [US1] Actualizar `spec.md` (FR-002 corregida, FR-003a nueva, sección "Corrección
+  2026-08-25", Acceptance Scenario 4/4a, SC-001/SC-002/SC-005, Assumptions), `research.md`
+  (Decisión 1 ampliada + Decisión 2a nueva) y la entrada **A-52** de
+  `specs/000-reconocimiento/registro-de-anomalias.md` para que documenten el alcance real
+  (Principio XII — trazabilidad).
+
+**Checkpoint**: los tres caminos de cobro que generan una `Sale` sin dejar `'pagada'`
+(`checkout_and_send`, `approve_payment_attempt`, `confirm_cash_payment_attempt`) ya lo hacen, en
+backend y frontend, sin perder la protección de mesa mientras cocina trabaja.
 
 ---
 

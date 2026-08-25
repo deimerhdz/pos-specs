@@ -61,6 +61,41 @@ coincidía exactamente con el código:
 Estos hallazgos se reflejan en el alcance de la Historia 1 abajo, incluyendo un punto que
 necesita una decisión de negocio explícita (ver Clarifications).
 
+## Corrección 2026-08-25 (durante la implementación)
+
+Tras implementar la primera versión de Historia 1 (acotada a `checkout_and_send`), el negocio
+reportó que un pedido QR seguía en `status: "abierta"` con `paid: true` **después** de que el
+cajero aprobara su comprobante desde la Terminal de Mesas — el mismo síntoma reportado
+originalmente, en un camino que el hallazgo de arriba había asumido, de forma incorrecta, que
+todavía no generaba ninguna Venta.
+
+**Lo que el hallazgo original tenía mal**: `approve_payment_attempt` y
+`confirm_cash_payment_attempt` (`pos-backend/app/api/v1/orders/checkout.py`) — las funciones
+que el cajero dispara al aprobar un comprobante o confirmar efectivo de un pedido QR desde la
+Terminal de Mesas — **ya generan la Venta en esa misma llamada** desde spec 028 (antes de esa
+spec, la Venta solo se generaba al cerrar la sesión de mesa; spec 028 lo adelantó para que
+"Reimprimir Factura" y "Liberar Mesa" funcionaran sobre un pedido QR individual, ver el
+docstring de `approve_payment_attempt`). El código de `pos-backend/app/api/v1/table_sessions/
+service.py:_billable_orders` ya documentaba este mismo hecho en su propio comentario ("evita
+facturar dos veces un pedido QR que ya se cobró al aprobar/confirmar su pago, aunque su
+`status` siga en `'abierta'`") — la spec original no lo tuvo en cuenta al investigar.
+
+**Lo que sigue siendo cierto**: el camino de recuperación manual `confirm_order` (llamado
+directamente, sin pasar por aprobar/confirmar un pago) no genera ninguna Venta — solo
+funciona sobre una orden cuyo intento de pago ya está `'confirmado'` por otro medio, y en ese
+caso no debe marcarse `'pagada'` (Acceptance Scenario 4a).
+
+**Impacto adicional descubierto**: la Terminal de Mesas (frontend,
+`pos-heladeria/src/app/modules/tables/services/pos-terminal.store.ts`) tiene su propio
+criterio independiente de "esta mesa todavía tiene consumo activo" (`activeOrders`/
+`tableOrders`), que también excluía `status === 'pagada'` sin mirar cocina — el mismo patrón
+que FR-003 ya corrigió en el backend (`tables_advanced.py`), pero en un lugar distinto que la
+spec original no había revisado. Sin corregirlo también ahí, un pedido QR pagado mientras
+cocina lo sigue preparando habría hecho ver la mesa como libre en el tablero del cajero. Ver
+FR-003a (nueva).
+
+Ver FR-002 (corregida) y FR-003a (nueva) abajo.
+
 ## Clarifications
 
 ### Session 2026-08-25
@@ -80,22 +115,25 @@ necesita una decisión de negocio explícita (ver Clarifications).
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - El estado de una orden cobrada en Terminal de Mesas queda "pagada" de verdad (Priority: P1)
+### User Story 1 - El estado de un pedido cobrado queda "pagada" de verdad (Priority: P1)
 
-Un cajero cobra una comanda desde la Terminal de Mesas ("Cobrar y enviar"). Hoy, aunque la
-venta se registra correctamente y el listado de Órdenes ya la muestra como "Pagada" (ver
-Hallazgo relevante), el campo `status` del pedido en base de datos se queda en `'abierta'`.
-El negocio necesita que, en el momento en que se confirma ese cobro, el `status` real del
-pedido pase a `'pagada'` — para que cualquier reporte, exportación o integración que
-consulte ese campo directamente vea un dato correcto, sin depender de que cada consumidor
-sepa que debe calcular el estado real a partir de si existe una venta.
+Un cajero cobra una comanda desde la Terminal de Mesas ("Cobrar y enviar"), o aprueba el
+comprobante/confirma el efectivo de un pedido enviado por un comensal vía QR. Hoy, aunque la
+venta se registra correctamente en los tres casos y el listado de Órdenes ya la muestra como
+"Pagada" (ver Hallazgo relevante), el campo `status` del pedido en base de datos se queda en
+`'abierta'`. El negocio necesita que, en el momento en que se confirma cualquiera de esos
+cobros, el `status` real del pedido pase a `'pagada'` — para que cualquier reporte,
+exportación o integración que consulte ese campo directamente vea un dato correcto, sin
+depender de que cada consumidor sepa que debe calcular el estado real a partir de si existe
+una venta.
 
 **Why this priority**: es el defecto de datos que originó el reporte — aunque la pantalla
 principal ya compensa el problema, el dato de origen sigue siendo incorrecto y cualquier
 otro punto del sistema que lo use directamente hereda ese error.
 
-**Independent Test**: cobrar una comanda desde Terminal de Mesas y consultar el pedido
-directamente (por API o en base de datos): su `status` debe ser `'pagada'`, no `'abierta'`.
+**Independent Test**: cobrar una comanda desde Terminal de Mesas, o aprobar/confirmar el pago
+de un pedido QR, y consultar el pedido directamente (por API o en base de datos): su `status`
+debe ser `'pagada'`, no `'abierta'`.
 
 **Acceptance Scenarios**:
 
@@ -111,10 +149,17 @@ directamente (por API o en base de datos): su `status` debe ser `'pagada'`, no `
    con otra, **Then** el sistema sigue impidiéndolo mientras quede trabajo de cocina
    pendiente — el cambio de `status` no debe abrir una forma nueva de perder de vista una
    mesa con comida sin terminar.
-4. **Given** un pedido enviado por el comensal vía QR cuyo pago aún no se ha resuelto (sin
-   venta todavía), **When** el personal lo confirma para que pase a cocina, **Then** su
-   `status` sigue avanzando a `'abierta'` como hoy — este camino no crea ninguna venta en
-   ese momento, así que no debe marcarse `'pagada'` prematuramente.
+4. **Given** un comprobante de transferencia que el cajero aprueba, o un pago en efectivo que
+   el cajero confirma, para un pedido enviado por el comensal vía QR, **When** eso ocurre,
+   **Then** el pedido queda con `status = 'pagada'` en la misma operación en la que se
+   registra la venta — igual que en el Escenario 1, sin esperar a que se cierre la sesión de
+   mesa *(corregido 2026-08-25: el redactado original de este escenario asumía, de forma
+   incorrecta, que este camino no genera venta hasta cerrar la mesa — ver Corrección abajo)*.
+4a. **Given** un intento de pago que ya quedó `'confirmado'` sin que exista todavía una venta
+   para su pedido (vía de recuperación manual, `confirm_order`, sin pasar por
+   aprobar/confirmar un pago) **When** el personal lo confirma para que pase a cocina,
+   **Then** su `status` avanza únicamente a `'abierta'` — este camino de recuperación no crea
+   ninguna venta, así que no debe marcarse `'pagada'`.
 5. **Given** una comanda cuyo cobro falla por falta de stock al momento de enviarla a
    cocina, **When** eso ocurre, **Then** ni la venta ni el cambio de `status` quedan
    aplicados — se revierte todo junto, igual que hoy.
@@ -185,10 +230,14 @@ correcto, sin el separador.
 - **FR-001**: Cuando se confirma el cobro de una comanda desde Terminal de Mesas ("Cobrar y
   enviar"), el sistema DEBE dejar el `status` del pedido en `'pagada'` en la misma operación
   en la que registra la venta.
-- **FR-002**: El sistema NO DEBE marcar `'pagada'` una orden en ningún otro punto del ciclo
-  de vida en el que todavía no exista una venta registrada para ella (en particular, el
-  camino de confirmación de pedidos por QR/comensal, que hoy avanza a `'abierta'` sin crear
-  ninguna venta en ese momento, debe seguir haciendo exactamente eso).
+- **FR-002** *(corregida 2026-08-25 — ver Corrección abajo)*: El sistema DEBE dejar el
+  `status` de un pedido QR en `'pagada'` en la misma operación en la que el cajero aprueba su
+  comprobante de transferencia o confirma su pago en efectivo (`approve_payment_attempt`/
+  `confirm_cash_payment_attempt`, spec 026/028) — ambas ya registran la venta en ese mismo
+  instante, no al cerrar la sesión de mesa. El sistema NO DEBE marcar `'pagada'` una orden en
+  ningún punto del ciclo de vida en el que todavía no exista una venta registrada para ella
+  (en particular, `confirm_order` como vía de recuperación manual — spec 026, sin comprobante
+  ni pago de por medio — sigue avanzando solo a `'abierta'`, sin crear ninguna venta).
 - **FR-003**: Las operaciones de liberar una mesa, mover una orden a otra mesa, y fusionar
   mesas (que hoy usan `status` para decidir si una mesa "todavía tiene trabajo pendiente")
   DEBEN dejar de asumir que una orden con `status = 'pagada'` ya no tiene nada pendiente en
@@ -196,6 +245,11 @@ correcto, sin el separador.
   todavía sin terminar de preparar (`estado_cocina` distinto de `listo`/`anulado`),
   independientemente de si su `status` ya es `'pagada'` — así se conserva la protección
   actual (Acceptance Scenario 3) sin depender de que `status` siga siendo no-terminal.
+- **FR-003a** *(nueva 2026-08-25)*: La Terminal de Mesas (frontend) DEBE aplicar el mismo
+  criterio de FR-003 al decidir si una mesa "todavía tiene consumo activo" para pintar su
+  tablero (`PosTerminalStore.activeOrders`/`tableOrders`) — una orden `'pagada'` con ítems
+  sin terminar de preparar sigue contando como consumo vivo de la mesa, para que la mesa no
+  se vea libre mientras cocina sigue trabajando en un pedido ya cobrado.
 - **FR-004**: El sistema DEBE seguir mostrando "Pagada" en el listado de Órdenes exactamente
   igual que hoy, para cualquier pedido con una venta registrada — este cambio no debe
   alterar ese comportamiento ya correcto.
@@ -235,27 +289,35 @@ correcto, sin el separador.
 
 ### Measurable Outcomes
 
-- **SC-001**: El 100% de las comandas cobradas desde Terminal de Mesas quedan con
-  `status = 'pagada'` en base de datos inmediatamente al confirmarse el cobro.
-- **SC-002**: El 0% de los pedidos confirmados por el camino de comensal/QR (sin venta
-  todavía) queda marcado `'pagada'` antes de que exista una venta real para ellos.
+- **SC-001**: El 100% de los pedidos cobrados por cualquiera de los tres caminos que generan
+  una venta y no dejaban `status='pagada'` (`checkout_and_send`, `approve_payment_attempt`,
+  `confirm_cash_payment_attempt`) quedan con `status = 'pagada'` en base de datos
+  inmediatamente al confirmarse el cobro.
+- **SC-002**: El 0% de los pedidos confirmados por la vía de recuperación manual
+  (`confirm_order`, sin venta todavía) queda marcado `'pagada'` antes de que exista una venta
+  real para ellos.
 - **SC-003**: El listado de Órdenes sigue mostrando "Pagada" para el 100% de los pedidos con
   venta registrada, sin regresión respecto al comportamiento actual.
 - **SC-004**: El 100% de los campos de precio/monto identificados en esta spec muestran el
   número con separador de miles mientras se escribe, y el valor guardado coincide
   exactamente con el número que el usuario quiso ingresar (sin errores de redondeo ni de
   formato) en el 100% de los casos probados.
-- **SC-005**: El 0% de las mesas con una orden cobrada por Terminal de Mesas y comida todavía
-  en preparación puede liberarse, moverse o fusionarse — mismo criterio de protección que
+- **SC-005**: El 0% de las mesas con una orden `'pagada'` por cualquiera de los tres caminos
+  de SC-001 y comida todavía en preparación puede liberarse, moverse o fusionarse — ni en las
+  operaciones del backend (`tables_advanced.py`) ni en el tablero de la Terminal de Mesas
+  (frontend, FR-003a) — mismo criterio de protección que
   existe hoy, verificado de nuevo tras el cambio de estado.
 
 ## Assumptions
 
-- **Historia 1 se acota al camino de "Cobrar y enviar" de Terminal de Mesas**
-  (`checkout_and_send`, spec 028) — es el único camino que hoy registra una venta y deja el
-  pedido en `'abierta'`. Los otros dos caminos que sí generan una venta (`pay_order`, el
-  camino legado de cobro, y el cierre de sesión de mesa, `close_session`) **ya** dejan el
-  pedido en `'pagada'` hoy — no requieren cambio.
+- **Historia 1 se acota a los tres caminos que registran una Venta sin dejar el pedido en
+  `'pagada'`** *(ampliado 2026-08-25 — ver Corrección arriba)*: `checkout_and_send` (Terminal
+  de Mesas, "Cobrar y enviar"), `approve_payment_attempt` (aprobar comprobante de un pedido
+  QR) y `confirm_cash_payment_attempt` (confirmar efectivo de un pedido QR) — los tres, spec
+  028. Los otros dos caminos que también generan una venta (`pay_order`, el camino legado de
+  cobro, y el cierre de sesión de mesa, `close_session`) **ya** dejan el pedido en `'pagada'`
+  hoy — no requieren cambio. `confirm_order` (vía de recuperación manual, sin generar venta)
+  tampoco cambia — sigue avanzando solo a `'abierta'`.
 - **El campo calculado `paid` (spec 029) no se retira** — sigue siendo la señal que ya usan
   correctamente el listado de Órdenes y otras protecciones del sistema (por ejemplo, contra
   anular un ítem de un pedido ya pagado). Esta spec solo agrega que, además, `status`

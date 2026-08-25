@@ -41,23 +41,34 @@ spec agrega un nuevo consumidor: las tres funciones de gestión de mesa en
 `orders/tables_advanced.py` (ver `research.md`, Decisión 2) lo consultan para decidir si una
 orden `'pagada'` todavía bloquea operaciones sobre su mesa.
 
-**Predicado nuevo** ("¿esta orden todavía bloquea la mesa?"), reemplaza a
-`status not in ('pagada', 'cancelada')` en `_active_orders_on_table`, y a
-`status in ('pagada', 'cancelada')` (negado) en los chequeos puntuales de `move_order` y
-`merge_orders`:
+**Dos predicados nuevos** (ver `research.md`, Decisión 2, para por qué no es uno solo):
 
-```text
-status != 'cancelada'
-AND (
-  status != 'pagada'
-  OR EXISTS (algún OrderItem de la orden con estado_cocina NOT IN ('listo', 'anulado'))
-)
-```
+- `_table_occupied_by_order(order)` — reemplaza a `status not in ('pagada', 'cancelada')` en
+  `_active_orders_on_table` (que alimenta `set_table_status` y los chequeos de mesa
+  destino/origen de `move_order`):
 
-Una orden `'cancelada'` nunca bloquea (sin cambio). Una orden no-`'pagada'`/no-`'cancelada'`
-(`'recibida'`/`'abierta'`/`'bloqueada'`) siempre bloquea (sin cambio — no depende de sus
-ítems). Una orden `'pagada'` bloquea únicamente mientras le queden ítems sin terminar de
-preparar (comportamiento nuevo de esta spec).
+  ```text
+  status == 'cancelada' → False
+  status == 'pagada'    → existe algún OrderItem de la orden con estado_cocina EN_CURSO
+                           ('pendiente' | 'en_preparacion')
+  cualquier otro status → True
+  ```
+
+- `_order_locked_for_move_or_merge(order)` — reemplaza al chequeo puntual sobre la orden que
+  se mueve en `move_order`, y sobre las órdenes a fusionar en `merge_orders`:
+
+  ```text
+  status == 'cancelada' → True
+  status == 'pagada'    → existe algún OrderItem de la orden con estado_cocina EN_CURSO
+  cualquier otro status → False
+  ```
+
+Ambos coinciden en el caso `'pagada'` (la pregunta de fondo, `_has_pending_kitchen_work`, es
+la misma), pero divergen en `'cancelada'` (nunca ocupa la mesa, pero siempre impide
+mover/fusionar esa orden en concreto) y en los estados no-terminales (siempre ocupan la mesa,
+pero nunca impiden mover/fusionar esa orden). Antes de esta spec, `'pagada'` se comportaba
+como `'cancelada'` en ambos sentidos a la vez; esta spec solo cambia el caso `'pagada'` con
+ítems pendientes.
 
 ## Componente de moneda (frontend, sin persistencia propia)
 

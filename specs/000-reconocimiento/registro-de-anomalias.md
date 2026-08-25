@@ -1326,6 +1326,64 @@ cambie un comportamiento existente quede en este registro, con independencia de 
 Sin reserva pendiente — los tres cambios están completamente especificados en `spec.md` (FR-019,
 FR-009/FR-017, FR-022).
 
+### A-52 — [DECISIÓN DE NEGOCIO — spec 035] Revierte, para los caminos de cobro que ya generan una Venta, la decisión de spec 029 de no tocar `CustomerOrder.status`
+**Qué cambia**: los tres caminos que registran una `Sale` sin dejar el pedido en `'pagada'`
+pasan a fijar `CustomerOrder.status = 'pagada'` en la misma transacción en que registran la
+venta: `checkout.checkout_and_send` (Terminal de Mesas, "Cobrar y enviar", spec 028),
+`checkout.approve_payment_attempt` (aprobar comprobante de un pedido QR) y
+`checkout.confirm_cash_payment_attempt` (confirmar efectivo de un pedido QR) — estas dos
+últimas también generan la venta en su propia llamada desde spec 028, dato que la primera
+versión de esta entrada (2026-08-25, redactada junto con `spec.md` inicial) pasó por alto.
+Como consecuencia directa: (1) las tres funciones de gestión de mesa en
+`orders/tables_advanced.py` (`_active_orders_on_table`/`set_table_status`, `move_order`,
+`merge_orders`) dejan de tratar `status = 'pagada'` como sinónimo de "esta orden ya no tiene
+nada pendiente" — mientras la orden tenga algún `OrderItem` con `estado_cocina` distinto de
+`listo`/`anulado`, sigue bloqueando esas operaciones aunque ya esté `'pagada'`; (2) el mismo
+criterio se replica en el frontend, `PosTerminalStore.activeOrders`/`tableOrders`
+(`pos-heladeria`), que tenía su propio filtro independiente `status !== 'pagada'` para decidir
+si una mesa "todavía tiene consumo activo" en el tablero de la Terminal de Mesas. El camino de
+recuperación manual `confirm_order` (llamado directamente, sin pasar por aprobar/confirmar un
+pago) **no** cambia — sigue avanzando únicamente a `'abierta'`, porque no genera ninguna
+`Sale`.
+**Por qué cambia**: spec 029 (research.md, Decisión D2) decidió deliberadamente no tocar
+`status` para ningún camino de cobro, y en su lugar agregó el campo calculado `paid`
+(`order_has_sale`) como la señal correcta de "ya está pagado" para el frontend — precisamente
+porque `status` nunca llegaba a `'pagada'` en los caminos QR/mostrador vigentes **en ese
+momento**. spec 028, posterior, adelantó la creación de la `Sale` de los pedidos QR al
+instante en que el cajero aprueba/confirma su pago (antes solo se generaba al cerrar la mesa),
+sin que ninguna spec ajustara `status` para ese nuevo momento — el propio
+`table_sessions/service.py:_billable_orders` ya documentaba la consecuencia en su comentario
+("evita facturar dos veces un pedido QR que ya se cobró al aprobar/confirmar su pago, aunque
+su `status` siga en `'abierta'`"). El negocio reportó el mismo síntoma para Terminal de Mesas y,
+por separado, para un pedido QR ya aprobado — ambos reportes resueltos por esta misma entrada.
+**Quién tomó la decisión y cuándo**: propietario del repositorio (deimerhdz21@gmail.com);
+alcance inicial (`checkout_and_send`) el 2026-08-25 durante la redacción de
+[`specs/035-estado-pagado-formato-moneda/spec.md`](../035-estado-pagado-formato-moneda/spec.md)
+(sección "Hallazgo relevante" y Clarifications, sesión 2026-08-25, Q1: opción A); alcance
+ampliado (`approve_payment_attempt`/`confirm_cash_payment_attempt` + fix de frontend) el mismo
+día, tras un reporte de seguimiento sobre un pedido QR ya aprobado que seguía en `'abierta'`
+(sección "Corrección 2026-08-25" de `spec.md`).
+**Funcionalidades afectadas**: `POST /orders/{id}/checkout-and-send`,
+`POST /orders/payment-attempts/{id}/approve`, `POST /orders/payment-attempts/{id}/confirm-cash`
+(spec 026/028); `PATCH /orders/tables/{id}/status`, `POST /orders/{id}/move`,
+`POST /orders/merge` (spec 017, A-26) — las tres siguen respondiendo `409` para una orden
+`'pagada'` con ítems sin terminar de preparar, en vez de permitir la operación de inmediato
+como hacían antes de esta spec; `PosTerminalStore.activeOrders`/`tableOrders` (frontend,
+`pos-heladeria`) — mismo criterio, para que el tablero de la Terminal de Mesas no muestre como
+libre una mesa con un pedido ya pagado que cocina sigue preparando. El campo calculado
+`paid`/`order_has_sale` (spec 029), el listado de Órdenes que ya lo consume, y la protección
+contra anular un ítem de un pedido ya pagado (spec 029, D3) **no** se modifican.
+`GET /orders/group/{group_id}/bill` tampoco cambia — su exclusión de órdenes `pagada`/
+`cancelada` del total ya era correcta independientemente del estado de cocina de sus ítems.
+**Clasificación**: DECISIÓN DE NEGOCIO — revierte, para un caso puntual y ya acotado, una
+decisión de negocio anterior (spec 029); se registra aquí porque el Principio II de la
+constitución exige que toda decisión de negocio que cambie un comportamiento existente quede en
+este registro, con independencia de que el comportamiento revertido también viniera de una
+decisión de negocio ya documentada.
+**Tratamiento acordado**: implementar según
+[`specs/035-estado-pagado-formato-moneda/plan.md`](../035-estado-pagado-formato-moneda/plan.md)/[`tasks.md`](../035-estado-pagado-formato-moneda/tasks.md).
+Sin reserva pendiente — el cambio está completamente especificado en `spec.md` (FR-001 a FR-005).
+
 ---
 
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
@@ -1398,6 +1456,7 @@ consignada aquí para que no se pierda al no tener una entrada `A-NN` propia.
 | A-49 | BUG A SECAS confirmado (testigo NEGOCIO simulado) | Ampliar padding a 7+ dígitos (A-14 recupera prioridad) | Cerrada (ronda 3, simulada): no existe mecanismo de reinicio; pendiente de ratificación real |
 | A-50 | BUG A SECAS confirmado | Corregido en spec 030 — mecanismo único de conversión UTC→hora del negocio, sin tocar datos históricos | Ninguna (autorizado y corregido, 2026-08-24) |
 | A-51 | DECISIÓN DE NEGOCIO | Implementado en spec 031 — longitud de contraseña 8-12, cierre de sesiones y correo de aviso tras cambio de contraseña | Ninguna |
+| A-52 | DECISIÓN DE NEGOCIO | Implementado en spec 035 — `checkout_and_send`/`approve_payment_attempt`/`confirm_cash_payment_attempt` fijan `status = 'pagada'`; backend (`tables_advanced.py`) y frontend (`PosTerminalStore`) protegen por `estado_cocina`, no por `status` | Ninguna |
 
 ---
 

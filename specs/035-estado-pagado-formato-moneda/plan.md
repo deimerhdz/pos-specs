@@ -62,9 +62,12 @@ esta funcionalidad no agrega ningún repositorio ni servicio nuevo.
 
 **Performance Goals**: Sin metas nuevas. Historia 1 no agrega ninguna consulta ni round-trip
 extra: el cambio de `status` viaja en la misma transacción ya abierta de
-`checkout_and_send`, y la condición SQL adicional de `tables_advanced.py` es un `EXISTS`
-sobre `order_items` ya indexado por `order_id` (FK). Historia 2 formatea en cada pulsación de
-tecla — debe sentirse instantáneo (sin lag perceptible) en el hardware ya usado por el staff.
+`checkout_and_send`, y `_active_orders_on_table` pasa de un `WHERE status NOT IN (...)` a
+cargar las órdenes de la mesa con sus ítems (`selectinload`, una sola consulta adicional por
+`order_id`, ya indexado por FK) y filtrar en Python — mismo patrón que el resto del módulo ya
+usa para `estado_cocina` (`research.md`, Decisión 2), sin impacto perceptible dado el volumen
+de órdenes por mesa. Historia 2 formatea en cada pulsación de tecla — debe sentirse
+instantáneo (sin lag perceptible) en el hardware ya usado por el staff.
 
 **Constraints**: Historia 1 no debe cambiar el significado de `paid`/`order_has_sale`
 (spec 029) ni las protecciones que ya usan esa señal correctamente (anular un ítem de un
@@ -77,7 +80,7 @@ solo aplicar el formato quando un campo dual porcentaje/pesos está en modo peso
 3 funciones ajustadas en `orders/tables_advanced.py` (`_active_orders_on_table`, y los
 chequeos puntuales de `move_order`/`merge_orders`), todo en `pos-backend`. Historia 2 — 1
 componente nuevo en `pos-heladeria/src/app/shared/money-input/` + ~12 puntos de uso
-migrados en 9 archivos ya identificados (ver `spec.md`, Assumptions).
+migrados en 12 archivos ya identificados (ver `spec.md`, Assumptions).
 
 ## Constitution Check
 
