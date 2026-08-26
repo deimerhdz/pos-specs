@@ -1386,6 +1386,42 @@ Sin reserva pendiente — el cambio está completamente especificado en `spec.md
 
 ---
 
+### A-53 — [DECISIÓN DE NEGOCIO — spec 038] El carrito confirmado se borra físicamente en vez de conservarse como `status='confirmado'`
+**Qué cambia**: `submit_cart` (menú QR) deja de marcar el carrito del comensal como
+`status='confirmado'` al crear el pedido — la fila de `Cart` y sus `CartItem`/`CartItemOption`
+se eliminan físicamente (`db.delete(cart)`) dentro de la misma transacción del pedido. Además,
+cada `OrderItem` creado gana un snapshot de descuento por línea (`discounted_unit_price`,
+`discounted_line_total`, nullable) que hoy no existe, y un segundo intento de confirmar sobre
+un carrito ya vaciado (con pedido no terminal previo) responde con un mensaje explícito de "ya
+fue enviado" en vez del 404/409 genérico actual. `consolidate_table` (vía del mesero,
+`orders/consolidation.py`) sigue produciendo `abierto → confirmado` exactamente igual — este
+cambio es exclusivo del camino QR.
+**Por qué cambia**: hoy el comensal no tiene forma de saber con certeza que su pedido salió —
+las líneas del carrito siguen existiendo en servidor y frontend después de confirmado, lo que
+permite reenviar el mismo carrito como pedido duplicado y hace que, al recargar, el comensal
+vea de nuevo líneas ya pedidas.
+**Quién tomó la decisión y cuándo**: propietario del repositorio (leonardogomez306@gmail.com),
+2026-08-26, durante la redacción de
+[`specs/038-vaciado-carrito-pedido/spec.md`](../038-vaciado-carrito-pedido/spec.md)
+(sección "Naturaleza de esta spec" y Clarifications, sesión 2026-08-26, Q1-Q4).
+**Funcionalidades afectadas**: `POST /cart/submit`, `GET /cart/orders`,
+`POST /cart/orders/{id}/cancel` (shape de `OrderItemResponse.items[]`); los 2 characterization
+tests `CONGELA` `test_submit_cart_confirma_pedido_y_abre_carrito_nuevo`
+(`test_cart_service.py:484-522`) y `test_submit_cart_endpoint_evento_tras_commit`
+(`test_cart_router.py:216-252`), reescritos citando esta spec. No afecta a
+`orders/consolidation.py`, `orders/checkout.py` ni `core/qr_context.py` (verificado en
+research.md Fase 0) ni a ninguna `Sale`/`Payment`/`SaleInvoice` ya emitida.
+**Clasificación**: DECISIÓN DE NEGOCIO — modifica comportamiento hoy protegido por 2
+characterization tests `CONGELA`; se registra aquí porque el Principio II de la constitución
+exige que toda decisión de negocio que cambie un comportamiento existente quede en este
+registro.
+**Tratamiento acordado**: implementar según
+[`specs/038-vaciado-carrito-pedido/plan.md`](../038-vaciado-carrito-pedido/plan.md)/[`tasks.md`](../038-vaciado-carrito-pedido/tasks.md).
+Sin reserva pendiente — el cambio está completamente especificado en `spec.md` (FR-001 a
+FR-015).
+
+---
+
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
 
 La entrada #1 de `memoria-historica.md` (2026-07-17, commit `8777acbc`) documenta que
