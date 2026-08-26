@@ -1422,6 +1422,45 @@ FR-015).
 
 ---
 
+### A-54 — [DECISIÓN DE NEGOCIO — spec 039] Los carritos de la sesión se eliminan físicamente al liberarse la mesa, sin importar su `status`
+
+**Qué cambia**: en los cinco caminos que hoy liberan una `DiningTable` (`try_release_if_empty`,
+`close_session`, `release_paid_session`, `release_table`, `_sweep_schema`), en el instante exacto
+en que la mesa pasa a `status='libre'`, todos los `Cart` de los participantes de las sesiones que
+se cerraron en esa operación se eliminan físicamente de la base de datos (`DELETE` masivo vía
+`checkout.delete_orphan_carts`), sin importar el `status` en que estuviera cada carrito
+(`abierto`, `abandonado` o `confirmado`). Hoy esos carritos quedan huérfanos para siempre en
+`status='abandonado'` una vez que la mesa se libera — la spec 038 solo cubrió el borrado en el
+momento de confirmar un pedido (`submit_cart`), dejando explícitamente fuera de alcance "la purga
+de carritos abandonados que nunca se convirtieron en pedido". Si la mesa no queda `libre` (pedido
+facturable pendiente, o `CustomerOrder` huérfano no terminal de la misma mesa física,
+RN-SCHED-03/RN-SCHED-04), ningún carrito se elimina.
+**Por qué cambia**: los carritos huérfanos que hoy se acumulan indefinidamente en mesas ya
+liberadas no le sirven a ningún flujo de negocio — ningún consumidor del sistema (cajero, mesero,
+comensal vía QR) necesita consultarlos después de que su mesa se liberó, y conservarlos permite
+que se acumulen sin límite en la base de datos.
+**Quién tomó la decisión y cuándo**: propietario del repositorio (leonardogomez306@gmail.com),
+2026-08-26, durante la redacción de
+[`specs/039-eliminacion-carritos-cierre-mesa/spec.md`](../039-eliminacion-carritos-cierre-mesa/spec.md)
+(sección "Naturaleza de esta spec").
+**Funcionalidades afectadas**: los 5 caminos de liberación de mesa
+(`try_release_if_empty`/`close_session`/`release_paid_session`/`release_table`/`_sweep_schema`) y
+el único characterization test `CONGELA`
+`test_leave_session_cierra_participante_abandona_carrito_y_libera_mesa`
+(`app/characterization_tests/test_cart_service.py:466-481`), reescrito citando esta spec. No
+afecta a `orders/consolidation.py` ni a `core/qr_context.py` (verificado en research.md Decisión
+4) ni a ninguna `Sale`/`Payment`/`SaleInvoice` ya emitida. No purga retroactivamente los carritos
+huérfanos que ya existen hoy en mesas ya `libre` desde antes de desplegar esta spec (Fuera de
+Alcance).
+**Clasificación**: DECISIÓN DE NEGOCIO — modifica comportamiento hoy protegido por un
+characterization test `CONGELA`; se registra aquí porque el Principio II de la constitución exige
+que toda decisión de negocio que cambie un comportamiento existente quede en este registro.
+**Tratamiento acordado**: implementar según
+[`specs/039-eliminacion-carritos-cierre-mesa/plan.md`](../039-eliminacion-carritos-cierre-mesa/plan.md)/[`tasks.md`](../039-eliminacion-carritos-cierre-mesa/tasks.md).
+Sin reserva pendiente — el cambio está completamente especificado en `spec.md` (FR-001 a FR-005).
+
+---
+
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
 
 La entrada #1 de `memoria-historica.md` (2026-07-17, commit `8777acbc`) documenta que
