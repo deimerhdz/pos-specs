@@ -1461,6 +1461,69 @@ Sin reserva pendiente — el cambio está completamente especificado en `spec.md
 
 ---
 
+### A-55 — [DECISIÓN DE NEGOCIO — spec 043] Guardado de producto consolidado en dos endpoints; se retiran los endpoints separados de variante, receta, grupos de opciones y reordenamiento
+
+**Qué cambia**: `POST /products` y `PATCH`/`PUT /products/{id}` pasan a aceptar, de forma
+aditiva (campo `variants` opcional en el body, back-compat con cualquier llamador que no lo
+envíe), el árbol completo de un producto — presentaciones, receta por presentación, grupos de
+opciones por presentación y su orden — y a persistirlo en una sola transacción de base de datos:
+si cualquier parte falla su validación, no se guarda nada de ese envío (todo o nada), y la
+respuesta exitosa devuelve el árbol completo guardado. Una vez el formulario de administración de
+productos (`pos-heladeria`) migra a usar solo estos dos endpoints, se retiran de
+`app/api/v1/catalog/router.py` los tres endpoints que la auditoría de FR-007 confirmó sin ningún
+otro consumidor: `PUT /variants/{id}/recipe`, `PUT /variants/{id}/option-groups` y
+`PATCH /products/{id}/variants/reorder`. Los otros dos candidatos originales,
+`POST /products/{id}/variants` y `PATCH /variants/{id}`, **quedan excluidos del retiro** (spec 043,
+User Story 4, Acceptance Scenario 3): esa misma auditoría encontró que
+`app/scripts/test_variantes_duplicadas.py` (el characterization script que la spec 002 cita para
+`RN-CAT-08`/`RN-CAT-09`) importa y llama esas dos funciones directamente en proceso, sin pasar por
+HTTP — un consumidor real, ajeno al formulario, que retirarlas rompería. Como consecuencia, la
+reactivación de una presentación
+desactivada por soft-delete — hoy una llamada de red instantánea y separada
+(`ProductService.restoreVariant`, `product-form.component.ts:914-921`, deliberada para no dejar al
+usuario atascado cuando el guardado del formulario es precisamente lo que está fallando por el
+nombre duplicado) — deja de ser una petición aparte: se resuelve en memoria en el formulario y se
+incluye en el siguiente guardado consolidado.
+**Por qué cambia**: crear o editar un producto con varias presentaciones dispara hoy una petición
+HTTP por presentación, una por receta, una por grupo de opciones y una de reordenamiento — hasta
+más de 15 peticiones secuenciales para un producto típico — lo que hace el guardado
+perceptiblemente lento y, al ejecutarse en pasos separados sin transacción común, puede dejar un
+producto a medias si un paso intermedio falla (el propio código de `ProductService.saveProduct` en
+`pos-heladeria` lo documenta: "on create the product may remain partially saved").
+**Quién tomó la decisión y cuándo**: propietario del repositorio (deimerhdz21@gmail.com),
+2026-08-27, durante la redacción de
+[`specs/043-guardado-unificado-producto/spec.md`](../043-guardado-unificado-producto/spec.md)
+(sección "Clarifications").
+**Funcionalidades afectadas**: el formulario de administración de productos completo (creación y
+edición) en `pos-heladeria`; los tres endpoints efectivamente retirados de
+`app/api/v1/catalog/router.py` (`PUT /variants/{id}/recipe`, `PUT /variants/{id}/option-groups`,
+`PATCH /products/{id}/variants/reorder`), junto con `reorder_variants`/`VariantReorderError`
+(`catalog/service.py`) y los schemas `RecipeSet`/`VariantOptionGroupSet`/`VariantReorderRequest`/
+`VariantOrderEntry`/`VariantReorderResponse` (`catalog/schemas.py`), que quedan sin ningún llamador
+una vez retirados esos endpoints; los characterization tests que los cubrían directamente
+(`app/characterization_tests/test_product_variant_reorder.py`, clase `ReorderVariantsTests`),
+reescritos citando esta spec en vez de eliminarse en silencio. `POST /products/{id}/variants` y
+`PATCH /variants/{id}` (`create_variant`/`update_variant`) **no se retiran** —excepción documentada
+arriba— y siguen siendo characterization tests vigentes de la spec 002 vía
+`app/scripts/test_variantes_duplicadas.py`, sin cambios. No afecta `GET /products`,
+`GET /products/{id}` ni `GET /variants/{id}/recipe`/`GET /variants/{id}/option-groups` (lectura,
+fuera de alcance de spec 043), ni la administración del catálogo de grupos de opciones como
+entidades independientes (`POST`/`PATCH`/`DELETE /option-groups`, `/option-groups/{id}/options`),
+ni ninguna venta o factura ya emitida.
+**Clasificación**: DECISIÓN DE NEGOCIO — retira endpoints hoy en producción y cambia el flujo de
+reactivación de una presentación desactivada; se registra aquí porque el Principio II de la
+constitución exige que toda decisión de negocio que cambie un comportamiento existente quede en
+este registro.
+**Tratamiento acordado**: implementado según
+[`specs/043-guardado-unificado-producto/plan.md`](../043-guardado-unificado-producto/plan.md)/`tasks.md`.
+El retiro de los cinco endpoints candidatos (FR-007) quedó condicionado a verificar primero que
+ningún otro consumidor además del formulario de productos los usara — la auditoría (tasks.md T030)
+encontró uno para dos de los cinco (`app/scripts/test_variantes_duplicadas.py`), que por eso quedan
+excluidos del retiro como excepción documentada arriba; los otros tres se retiraron según lo
+previsto.
+
+---
+
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
 
 La entrada #1 de `memoria-historica.md` (2026-07-17, commit `8777acbc`) documenta que
@@ -1532,6 +1595,7 @@ consignada aquí para que no se pierda al no tener una entrada `A-NN` propia.
 | A-50 | BUG A SECAS confirmado | Corregido en spec 030 — mecanismo único de conversión UTC→hora del negocio, sin tocar datos históricos | Ninguna (autorizado y corregido, 2026-08-24) |
 | A-51 | DECISIÓN DE NEGOCIO | Implementado en spec 031 — longitud de contraseña 8-12, cierre de sesiones y correo de aviso tras cambio de contraseña | Ninguna |
 | A-52 | DECISIÓN DE NEGOCIO | Implementado en spec 035 — `checkout_and_send`/`approve_payment_attempt`/`confirm_cash_payment_attempt` fijan `status = 'pagada'`; backend (`tables_advanced.py`) y frontend (`PosTerminalStore`) protegen por `estado_cocina`, no por `status` | Ninguna |
+| A-55 | DECISIÓN DE NEGOCIO | Implementado según spec 043 (`plan.md`/`tasks.md`) — `POST`/`PATCH /products` consolidan el árbol completo del producto en una transacción todo-o-nada; se retiraron receta/grupos de opciones/reordenamiento (3 de 5); variante individual (2 de 5) quedó excepcionada por `test_variantes_duplicadas.py` | Ninguna (auditoría de FR-007 ya ejecutada) |
 
 ---
 
