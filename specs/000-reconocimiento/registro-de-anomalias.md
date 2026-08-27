@@ -1524,6 +1524,70 @@ previsto.
 
 ---
 
+### A-56 — [DECISIÓN DE NEGOCIO — spec 044] Rechazar un pedido con pago en efectivo o transferencia sin comprobante también rechaza el pedido completo, no solo el intento de pago
+
+**Qué cambia**: en la pantalla "Pagos por confirmar" de la Terminal de Mesas (spec 036, panel
+`payment-attempt-review-panel.component.ts`), cuando el intento de pago pendiente de un pedido es
+en **efectivo**, o es una **transferencia sin comprobante subido aún**, el cajero gana un botón
+"Rechazar pedido" (motivo obligatorio) que cancela el pedido completo (`status → "cancelada"`,
+mismo endpoint `POST /orders/{id}/cancel` que ya existía, `checkout.cancel_order`,
+`pos-backend/app/api/v1/orders/checkout.py`) y, en la misma transacción, marca el intento de pago
+`pendiente` de ese pedido como `rechazado` con el mismo motivo. Antes de este cambio, ninguna de
+las dos vías de rechazo estaba disponible para esos dos casos: el backend rechazaba
+explícitamente (`409`) cualquier intento de rechazar un intento de pago en efectivo
+(`reject_payment_attempt`, sin cambios), y la transferencia sin comprobante no mostraba ninguna
+acción. Para transferencia **con** comprobante ya subido, el "Rechazar" existente (rechaza solo el
+intento, permite reintentar con otro comprobante) **no cambia**.
+
+Esto revierte, explícitamente y solo para esos dos casos, la Decisión D5 de la spec
+[028](../028-terminal-mesas-modo-hibrido/spec.md) (`research.md`, sección "D5: Un solo significado
+de 'Rechazar'"), que había retirado a propósito el botón de rechazo a nivel de pedido completo de
+esta pantalla, razonando que "el spec no pide ni autoriza esa segunda semántica". El dueño del
+producto, al reportar el hueco operativo que esa decisión dejaba (ningún cajero podía rechazar un
+pedido con pago en efectivo pendiente), autorizó explícitamente la reversión para esos dos casos.
+
+Además, sin relación con esta decisión de negocio, se corrige un bug de sincronización de estado:
+`PosTerminalStore.reload()` (`pos-heladeria/.../services/pos-terminal.store.ts`) refrescaba la
+lista de pedidos pero nunca volvía a calcular `selectedOrderId` — al confirmar/aprobar un pago QR
+pendiente, el pedido dejaba de estar excluido del conjunto de pedidos activos de la mesa, pero la
+selección se quedaba apuntando a `null` (desde que se seleccionó la mesa mientras el pedido aún
+estaba pendiente) hasta que el cajero volvía a tocar la tarjeta.
+
+**Por qué cambia**: un pedido con pago en efectivo o transferencia sin comprobante que no debía
+seguir adelante (el comensal se fue, faltó un insumo, cualquier motivo operativo) no tenía
+ninguna salida desde la pantalla de "Pagos por confirmar" — quedaba indefinidamente "pendiente de
+revisión" sin que el cajero pudiera hacer nada al respecto desde ahí.
+
+**Quién tomó la decisión y cuándo**: propietario del repositorio (deimerhdz21@gmail.com),
+2026-08-27, durante la redacción de
+[`specs/044-rechazo-pedido-pago-pendiente/spec.md`](../044-rechazo-pedido-pago-pendiente/spec.md)
+(sección "Clarifications").
+
+**Funcionalidades afectadas**: `checkout.cancel_order` (`pos-backend/app/api/v1/orders/checkout.py`,
+extendido para resolver el intento de pago pendiente de la orden que cancela — sin cambio de
+firma ni de schema `CancelIn`); `payment-attempt-review-panel.component.ts` (nuevo botón "Rechazar
+pedido" en las ramas efectivo y transferencia-sin-comprobante; sin cambios en la rama
+transferencia-con-comprobante); `payment-validation-block.component.ts` (comentario corregido,
+sin cambio de wiring); `pending-payments-panel.component.ts` (sin cambios — hereda el nuevo botón
+automáticamente al embeber el mismo panel); `PosTerminalStore.reload()` (nuevo método privado
+`resyncSelectedOrder`, corrección de bug no relacionada con la decisión de negocio). No afecta
+`reject_payment_attempt` (con su guardia `is_cash`, sin cambios), el "Rechazar pedido" que ya
+existe en el panel de cobro (`PosTerminalStore.rejectOrder()`, motivo fijo, pantalla distinta), ni
+la liberación de mesa (`cancel_order` sigue sin tocarla).
+
+**Clasificación**: DECISIÓN DE NEGOCIO (para el rechazo de pedido completo) + CORRECCIÓN DE BUG
+(para la sincronización de `selectedOrderId`, sin decisión de negocio asociada) — se registra aquí
+porque el Principio II de la constitución exige que toda decisión de negocio que revierta un
+comportamiento ya documentado (Decisión D5, spec 028) quede en este registro.
+
+**Tratamiento acordado**: implementado según
+[`specs/044-rechazo-pedido-pago-pendiente/spec.md`](../044-rechazo-pedido-pago-pendiente/spec.md).
+Verificado sin regresiones: 456/456 characterization tests de `pos-backend` y 463/463 tests de
+`pos-heladeria` relevantes (mismas fallas preexistentes y ajenas a este cambio, confirmadas con
+`git stash` contra `develop` antes de tocar nada).
+
+---
+
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
 
 La entrada #1 de `memoria-historica.md` (2026-07-17, commit `8777acbc`) documenta que
@@ -1596,6 +1660,7 @@ consignada aquí para que no se pierda al no tener una entrada `A-NN` propia.
 | A-51 | DECISIÓN DE NEGOCIO | Implementado en spec 031 — longitud de contraseña 8-12, cierre de sesiones y correo de aviso tras cambio de contraseña | Ninguna |
 | A-52 | DECISIÓN DE NEGOCIO | Implementado en spec 035 — `checkout_and_send`/`approve_payment_attempt`/`confirm_cash_payment_attempt` fijan `status = 'pagada'`; backend (`tables_advanced.py`) y frontend (`PosTerminalStore`) protegen por `estado_cocina`, no por `status` | Ninguna |
 | A-55 | DECISIÓN DE NEGOCIO | Implementado según spec 043 (`plan.md`/`tasks.md`) — `POST`/`PATCH /products` consolidan el árbol completo del producto en una transacción todo-o-nada; se retiraron receta/grupos de opciones/reordenamiento (3 de 5); variante individual (2 de 5) quedó excepcionada por `test_variantes_duplicadas.py` | Ninguna (auditoría de FR-007 ya ejecutada) |
+| A-56 | DECISIÓN DE NEGOCIO + CORRECCIÓN DE BUG | Implementado según spec 044 — revierte Decisión D5 (spec 028) para efectivo y transferencia sin comprobante: "Rechazar" ahora cancela el pedido completo y resuelve el intento de pago, con motivo; transferencia con comprobante sin cambios. Corrige además `selectedOrderId` obsoleto tras confirmar un pago (bug, sin decisión de negocio) | Ninguna |
 
 ---
 
