@@ -76,7 +76,7 @@ prevalece sobre el campo "Decisión de negocio pendiente" de la entrada correspo
 | A-20 / RN-CASH-17 | DUDOSA | **Requisito de negocio nuevo**: snapshot inmutable del cierre + vista de ajustes separada (más estricto que "congelar" o "recalcular") | P14 |
 | A-21 | PENDIENTE | **INTENCIONAL confirmado** — localStorage es el diseño definitivo, no prioridad la cookie httpOnly | P15 |
 | A-27 | ACCIDENTAL | Reforzada — hay revisión manual hoy, **el negocio pide explícitamente pasar a pruebas automáticas** | P24 |
-| A-29 | PENDIENTE | Sigue PENDIENTE en código, pero **sin impacto práctico** — no usan ese reporte | P21 |
+| A-29 | PENDIENTE | ~~Sigue PENDIENTE en código~~ **RESUELTA por la spec 063** (2026-08-31): se persiste `applied_promotions` (agregado + lista) en `sales`/`invoices`/`customer_orders`; ver A-64 | P21 |
 | A-31 | DUDOSA, candidato a retirar | **Cambia de tratamiento**: candidato a completar la migración (necesitan conversión litros↔onzas para el granizado) | P19 |
 | A-33 | PENDIENTE | **INTENCIONAL confirmado** — el bloqueo actual es correcto | P22 |
 | A-35 / RN-INV-11 | DUDOSA | **Requisito confirmado**: motivo de ajuste debe ser obligatorio | P23 |
@@ -836,6 +836,13 @@ es si la pérdida de trazabilidad en reportes por promoción es aceptable.
 (reglas-de-negocio.md, pregunta abierta #18).
 **Depende de esto**: cualquier reporte que agrupe ventas por promoción/combo específico.
 **Tratamiento acordado**: documentar sin especificar hasta la respuesta del negocio.
+**Actualización 2026-08-31 — RESUELTA por la spec 063 (ver A-64)**: el refactor de promociones
+por conjunto de variantes persiste el **monto de descuento agregado + la lista de promociones que
+lo generaron** (columna JSONB `applied_promotions`) en `sales`, `invoices` y `customer_orders`, de
+forma que el arqueo de caja y la consulta de una venta pasada muestran de qué promoción(es) vino
+el descuento aunque haya sido más de una. El tipo `combo` se elimina en la misma spec (A-61), así
+que el caso concreto de "dos combos distintos" deja de existir. No retroactivo: las ventas
+emitidas antes del despliegue mantienen `applied_promotions = '[]'`.
 
 ### A-30 — `PATCH` de promociones puede disparar un `IntegrityError` no controlado
 **Descripción**: dos vectores distintos del mismo módulo: (1) `PATCH {"name": null}` pasa la
@@ -1621,6 +1628,216 @@ vez cambia el comportamiento observable de promociones existentes; se registra p
 (tarea T009a), con test de la combinación en `test_promotions_rules.py` y en el char test de US1
 (T019). No retroactivo: no recalcula ninguna `Sale`/`SaleInvoice` ya emitida (Principio VII).
 
+### A-58 — [DECISIÓN DE NEGOCIO — spec 063] Se elimina `Promotion.priority` por completo
+
+**Qué cambia**: `promotions.priority` (columna, `server_default="0"`), el desempate del motor
+(`_best_line_match`: `key = (p.priority, amount, -created_at)`, `service.py:291`), el orden del
+listado (`list_query` → `order_by(Promotion.priority.desc(), ...)`, `service.py:790`) y el campo
+del formulario de administración desaparecen. `list_query` ordena por `Promotion.name`.
+**Por qué cambia**: `priority` solo existía para resolver el conflicto cuando dos promociones
+tocaban la misma línea. Con el bloqueo de solape real de la spec 063 (FR-014, ver A-59), dos
+promociones nunca pueden aplicar a la misma línea en el mismo instante, así que no queda ningún
+conflicto que desempatar. Un campo que no gobierna nada es ruido en el formulario y en el modelo.
+**Quién tomó la decisión y cuándo**: propietario del repositorio (leonardogomez306@gmail.com),
+2026-08-31, en las Clarifications de
+[`specs/063-promociones-por-variante/spec.md`](../063-promociones-por-variante/spec.md)
+("Se elimina `priority` del modelo, del criterio de conflicto, del listado ordenado por prioridad
+y de la interfaz").
+**Funcionalidades afectadas**: RN-PROMO-13, RN-PROMO-14 (desempate por prioridad, INTENCIONAL),
+RN-PROMO-43 (listado ordenado por prioridad) quedan derogadas. El motor de evaluación en los ~9
+caminos de cobro/preview. El formulario de promociones (`promotions-page.component.ts`) y el
+script de CI `app/scripts/test_promotions_rules.py` (§4, reescrito).
+**Clasificación**: DECISIÓN DE NEGOCIO — deroga reglas INTENCIONAL protegidas.
+**Tratamiento acordado**: implementar en los incrementos A (borrado de columna) y C (motor) de
+`specs/063-promociones-por-variante/tasks.md`. No retroactivo (Principio VII).
+
+### A-59 — [DECISIÓN DE NEGOCIO — spec 063] El solape entre promociones pasa de advertencia a bloqueo
+
+**Qué cambia**: hoy `find_overlaps` (`service.py:750`) devuelve una **advertencia**
+(`PromotionWithOverlaps.overlaps`) y "quien decide es `priority`". A partir de la spec 063,
+`_guard_variant_overlap` **rechaza con 409** crear o activar una promoción cuyo conjunto de
+variantes comparta ≥1 variante con otra promoción en `draft`/`active`/`paused` **si además** sus
+rangos de fecha **y** conjuntos de días **y** ventanas horarias se intersectan (una dimensión no
+definida —sin franja, días vacíos, sin fecha de fin— cuenta como que cubre todo su dominio). El
+mensaje nombra la promoción en conflicto y la(s) variante(s) compartida(s). `find_overlaps`,
+`_scope_overlap`, `OverlapResponse`, `PromotionWithOverlaps` y el campo `overlaps` se eliminan.
+**Por qué cambia**: el razonamiento original ("un bloqueo duro haría imposibles los propios casos
+de uso del RF") dependía de que `priority` resolviera el empate. Sin `priority` (A-58), el
+solapamiento real es exactamente lo que hay que impedir: dejaría una línea entre dos promociones
+al mismo instante con resultado ambiguo.
+**Quién tomó la decisión y cuándo**: propietario del repositorio, 2026-08-31, Clarifications de
+`specs/063-promociones-por-variante/spec.md` (FR-014, FR-014a).
+**Funcionalidades afectadas**: RN-PROMO-30 (solape = advertencia) queda derogada. La creación y
+activación de promociones (`create`, `update_shape`, `change_status → active`). La respuesta de
+`POST`/`PATCH /promotions` pierde `overlaps`. `test_promotions_router.py` (CONGELA, reescrito).
+**Clasificación**: DECISIÓN DE NEGOCIO.
+**Tratamiento acordado**: incremento B de `specs/063-promociones-por-variante/tasks.md`. No
+retroactivo.
+
+### A-60 — [DECISIÓN DE NEGOCIO — spec 063] Se elimina el alcance por categoría y la captura automática de productos futuros
+
+**Qué cambia**: `PromotionTarget` (alcance por `product_id` XOR `category_id`) se elimina entero.
+El alcance de una promoción se resuelve **solo** por la lista explícita de variantes
+(`promotion_variants`). Se deroga la regla "marcar una categoría incluye los productos creados
+después": una variante creada después **no** entra sola en ninguna promoción. Los filtros por
+producto/categoría/texto del formulario pasan a ser **solo ayuda para poblar el selector**; lo
+que se guarda es la lista concreta de variantes.
+**Por qué cambia**: el modelo por conjunto explícito de variantes es la razón de ser de la spec
+063 (un producto tiene varias presentaciones con precios distintos; el alcance por producto no
+las distingue). El alcance automático por categoría es incompatible con "el administrador eligió
+explícitamente estas variantes".
+**Quién tomó la decisión y cuándo**: propietario del repositorio, 2026-08-31, Clarifications de
+`specs/063-promociones-por-variante/spec.md` (FR-003, FR-004, FR-010; "se deroga la regla 'una
+promo por presentación aplica a todos los productos con esa presentación'").
+**Funcionalidades afectadas**: RN-PROMO-06 (parte de alcance por categoría). El motor
+(`_matching_target`, eliminado). El formulario (`scope-picker.component.ts`, eliminado). Tests
+`test_cart_service.py`, `test_orders_tables_advanced.py`, `test_menu_router.py` (reescritos).
+**Clasificación**: DECISIÓN DE NEGOCIO.
+**Tratamiento acordado**: incrementos A/B/C de `specs/063-promociones-por-variante/tasks.md`. La
+migración materializa el conjunto de las `percent` existentes como foto fija (A-62). No
+retroactivo.
+
+### A-61 — [DECISIÓN DE NEGOCIO — spec 063] Se elimina el tipo `combo` y su mecanismo de selección explícita
+
+**Qué cambia**: el tipo `combo`, la tabla `promotion_combo_items`, `promotions.expand_combo` /
+`get_active_combo` / `combo_discount_for_lines`, la rama `combo_id` de `cart.service.add_item` /
+`_add_combo` y de `orders.consolidation.add_item_to_table`, y el campo `combo_id` de los payloads
+de carrito/orden se retiran del código. Las **columnas** `cart_items.combo_id`,
+`order_items.combo_id`, `sale_items.combo_id` **se conservan** (nullable, dejan de escribirse) y
+**ninguna línea de venta histórica marcada con un combo se altera** (Principio VII/VIII: borrar
+la columna cambiaría la representación histórica). Las promociones `combo` vigentes pasan a
+`Finalizada` en la migración (ver A-62); **no** se migran a otra forma.
+**Por qué cambia**: un `combo` es "esta canasta específica de componentes"; el modelo nuevo solo
+expresa "N unidades cualesquiera del conjunto". Migrar un combo en automático cambiaría el precio
+en silencio. El mecanismo de selección explícita (marca en las líneas, expansión al agregar) no
+tiene lugar en el modelo nuevo.
+**Quién tomó la decisión y cuándo**: propietario del repositorio, 2026-08-31, Clarifications de
+`specs/063-promociones-por-variante/spec.md` (FR-024, FR-025; "Se elimina el tipo `combo`... las
+promociones `combo` existentes no se migran automáticamente").
+**Funcionalidades afectadas**: la terminal de mesas (`combo-select.component.ts`, eliminado), el
+carrito QR, el cobro. Tests `test_cart_service.py::test_add_item_combo` /
+`test_serialize_cart_combo_*`, `test_orders_consolidation.py::test_add_item_to_table_combo_*`,
+`test_orders_checkout.py::test_pay_order_dos_combos_*`,
+`test_table_sessions_service.py::test_close_session_unified_a29_*`,
+`test_orders_tables_advanced.py::test_group_bill_aplica_combo_vigente_*` (se eliminan o se
+reescriben).
+**Clasificación**: DECISIÓN DE NEGOCIO.
+**Tratamiento acordado**: incrementos A (migración a `Finalizada`), C (retiro del cobro), E
+(retiro de la terminal), F (tests) de `specs/063-promociones-por-variante/tasks.md`. No
+retroactivo.
+
+### A-62 — [DECISIÓN DE NEGOCIO — spec 063] Se eliminan `qty_price`, `qty_price_presentation` y `fixed`; solo `percent` se migra automáticamente
+
+**Qué cambia**: los tipos quedan en **dos**: `percent` y `package_price` (valor nuevo; `value` =
+precio total de `min_qty` unidades). Los identificadores `buy_x_get_y`, `qty_price`,
+`qty_price_presentation`, `combo` y `fixed` se retiran del enum y del `CHECK ck_promotion_type`.
+En la migración: cada `percent` no terminal se **migra automáticamente** materializando su
+conjunto de variantes (foto fija al momento de migrar: variantes activas alcanzadas por sus
+`targets`, o todas las del tenant si es global); cada `combo` / `fixed` / `qty_price` /
+`qty_price_presentation` no terminal pasa a `status = 'finished'` con `closed_by_refactor_at`
+sellado, y el administrador ve un aviso (`GET /promotions?closed_by_refactor=true`) para
+recrearla a mano si sigue vigente.
+**Por qué cambia**: el `value` de un `fixed` es un monto de descuento por línea; el de un
+`qty_price` / `qty_price_presentation` vive por target/regla con su propio precio; un `combo` es
+una canasta específica. Ninguno equivale a un porcentaje ni a un "precio de paquete de N unidades
+cualesquiera del conjunto" — traducirlos en automático cambiaría el importe cobrado en silencio.
+El `value` de un `percent` es un porcentaje con semántica idéntica en el modelo nuevo, así que
+migrarlo es seguro.
+**Quién tomó la decisión y cuándo**: propietario del repositorio, 2026-08-31, Clarifications de
+`specs/063-promociones-por-variante/spec.md` (FR-002, FR-025, FR-026; "Migración automática: cada
+`target`... se materializa como un conjunto de variantes (foto fija)"; "No se migra
+automáticamente: pasa a `Finalizada` con aviso").
+**Funcionalidades afectadas**: `_line_discount` (qty_price/fixed), `_matching_target`,
+`_pack_terms` (eliminados). El script de CI `app/scripts/test_promotions_rules.py` (§3, §3b, §6,
+reescritos). Todo char test que congelaba el descuento de `fixed` o `qty_price` — inventario
+completo en
+[`specs/063-promociones-por-variante/contracts/migracion.md`](../063-promociones-por-variante/contracts/migracion.md)
+§2. La entidad `Presentation` va aparte (A-63).
+**Clasificación**: DECISIÓN DE NEGOCIO.
+**Tratamiento acordado**: incrementos A (migración de datos + enum), B (validación de los dos
+tipos), F (tests) de `specs/063-promociones-por-variante/tasks.md`. No retroactivo: ninguna
+`Sale`/`SaleInvoice` ya emitida se recalcula.
+
+### A-63 — [DECISIÓN DE NEGOCIO — spec 063] Se elimina la entidad `Presentation` (revierte la parte de modelo de datos de la spec 040)
+
+**Qué cambia**: la tabla `presentations`, la columna `product_variants.presentation_id` (+ su FK
++ su índice), la tabla `promotion_presentation_rules`, el paquete `api/v1/presentations/`, el
+módulo Angular `modules/presentations/`, el selector de presentación en el formulario de producto
+y la ruta `/dashboard/presentations` se eliminan. Las reglas de promoción usan directamente
+`product_variants` vía `promotion_variants`. **Se conserva** el resto de la spec 040: la
+corrección de `_valid_now` al cruzar la medianoche (**A-57**), la vigencia por `days_of_week`
+(conjunto) y ventana horaria con cruce de medianoche en zona del tenant, y el anuncio en el menú
+QR (`GET /menu/promotions`, clave `promotions` del flujo QR con token) — adaptado a "conjunto de
+variantes" en lugar de "presentación".
+**Por qué cambia**: la spec 040 configuraba el precio de paquete por presentación de catálogo
+compartida; el modelo por conjunto explícito de variantes (spec 063) lo subsume y lo hace más
+expresivo (un paquete puede combinar variantes que el administrador eligió una a una, no solo las
+que comparten una presentación). Mantener `Presentation` sería un segundo mecanismo de alcance
+redundante.
+**Quién tomó la decisión y cuándo**: propietario del repositorio, 2026-08-31, Clarifications de
+`specs/063-promociones-por-variante/spec.md` ("¿La entidad `Presentation` sobrevive? → A: No. Se
+elimina el modelo de presentaciones (backend y frontend); las reglas de promoción usan
+directamente `ProductVariant` (FR-027)").
+**Funcionalidades afectadas**: el módulo de administración de presentaciones (spec 040 FR-024),
+el formulario de producto. Tests de la spec 040 sin prefijo CONGELA
+(`test_promotions_presentation_pricing.py`, `test_promotions_presentation_rules.py`,
+`test_presentations_service.py`, `presentation_fixtures.py`) — se **eliminan**.
+**Clasificación**: DECISIÓN DE NEGOCIO — revierte parte de una spec previamente mergeada
+(`pos-backend` PR #47, `pos-heladeria` PR #48).
+**Tratamiento acordado**: incremento A (migración: `DROP TABLE` tras el paso de datos) y E
+(frontend) de `specs/063-promociones-por-variante/tasks.md`. El `downgrade` recrea la estructura
+de la spec 040 vacía. No retroactivo.
+
+### A-64 — [DECISIÓN DE NEGOCIO — spec 063] Se persiste el descuento agregado + la lista de promociones en `sales`, `invoices` y `customer_orders` (resuelve A-29)
+
+**Qué cambia**: columna `applied_promotions` (JSONB, `[{promotion_id, name, amount}]`, snapshot
+inmutable al emitir) en `sales`, `invoices` y `customer_orders`; `customer_orders` además gana
+`discount NUMERIC(12,2)` (hoy no tiene ningún campo de descuento). `Sale.discount` /
+`Invoice.discount` siguen siendo el agregado. `Sale.promotion_id` (FK única) **se conserva** y se
+sigue poblando cuando una sola promoción explica todo el descuento; con dos o más queda `NULL`
+como hoy, **pero ahora `applied_promotions` registra las dos**. El desglose **por línea de venta**
+(variante ↔ promoción ↔ monto) queda **fuera de alcance** de esta spec.
+**Por qué cambia**: hoy, con más de una promoción o combo en una venta, `promotion_id` queda
+`NULL` y no queda registrada **ninguna** promoción — el arqueo de caja y la consulta de una venta
+pasada no pueden decir de qué promoción vino el descuento (**esto es A-29**). Guardar el agregado
++ la lista lo resuelve sin construir el desglose por línea (spec aparte).
+**Quién tomó la decisión y cuándo**: propietario del repositorio, 2026-08-31, Clarifications de
+`specs/063-promociones-por-variante/spec.md` ("Se persiste el monto de descuento agregado más la
+lista de promociones que lo generaron, en `Sale`, `SaleInvoice` (factura) y `CustomerOrder`...
+Resuelve A-29"; "El desglose por línea de venta queda fuera de este refactor, para una spec
+aparte (FR-021)").
+**Funcionalidades afectadas**: **cierra A-29** (ver la actualización de esa entrada). `build_sale`
+(`sales/builder.py`), `issue_for_sale` (`invoices/service.py`), los caminos de cobro de mesa. El
+arqueo de caja y la analítica de ventas por promoción solo se **documentan** en esta spec; sin
+requisito nuevo de reporte.
+**Clasificación**: DECISIÓN DE NEGOCIO.
+**Tratamiento acordado**: incremento C de `specs/063-promociones-por-variante/tasks.md`. **No
+retroactivo** (Principio VII): `applied_promotions` nace `'[]'`, `customer_orders.discount` nace
+`0`; ninguna venta ni factura emitida antes del despliegue se recalcula ni se re-serializa.
+
+### A-65 — [DECISIÓN DE NEGOCIO — spec 063] Se deroga la regla "dentro de una misma presentación el precio unitario es siempre el mismo"
+
+**Qué cambia**: la spec 040 introdujo (`_check_presentation_rule_prices`, su FR-017) una
+verificación con confirmación explícita que trataba como sospechoso que dos variantes de la misma
+presentación tuvieran precios distintos. Esa verificación y sus flags (`confirm_precio_no_uniforme`,
+`confirm_sin_descuento`) se eliminan. Ninguna validación del modelo nuevo asume que dos variantes
+"del mismo tamaño" cuestan lo mismo: el motor trabaja con el `unit_price` real de cada unidad, el
+consumo codicioso ordena por precio real, y FR-016 usa el precio de la variante **más barata** del
+conjunto.
+**Por qué cambia**: la regla es **falsa en el catálogo real** del tenant (Springfield Granizados):
+un Granizado Pequeño **con licor** cuesta $8.000 y uno **sin licor** $6.000. Tratar eso como una
+anomalía a confirmar es fricción sin valor.
+**Quién tomó la decisión y cuándo**: propietario del repositorio, 2026-08-31, en
+`specs/063-promociones-por-variante/spec.md` §"Cambios de comportamiento respecto de producción",
+punto 8, y §Assumptions ("La regla 'precio uniforme por presentación' es falsa y se deroga...
+Ninguna validación debe asumir que dos variantes del mismo tamaño cuestan lo mismo").
+**Funcionalidades afectadas**: `_check_presentation_rule_prices` (eliminado con la entidad
+`Presentation`, A-63). El formulario de promociones pierde los diálogos de confirmación de
+uniformidad.
+**Clasificación**: DECISIÓN DE NEGOCIO — deroga una regla introducida por la spec 040.
+**Tratamiento acordado**: incrementos B/E de `specs/063-promociones-por-variante/tasks.md`.
+Coincide con la eliminación de `Presentation` (A-63). No retroactivo.
+
 ---
 
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
@@ -1670,7 +1887,7 @@ consignada aquí para que no se pierda al no tener una entrada `A-NN` propia.
 | A-26 | PENDIENTE / ACCIDENTAL | Corregir + documentar | Restricción de `move_order` |
 | A-27 | ACCIDENTAL | Corregir en modernización | Historia de CI del frontend |
 | A-28 | ACCIDENTAL | Corregir en modernización | Historial de cambios en `.env` |
-| A-29 | PENDIENTE | Documentar sin especificar | Trazabilidad de combos múltiples |
+| A-29 | ~~PENDIENTE~~ **RESUELTA** (spec 063, ver A-64) | Persistir `applied_promotions` (agregado + lista) en `sales`/`invoices`/`customer_orders`; tipo `combo` eliminado | Ninguna |
 | A-30 | ACCIDENTAL / PENDIENTE | Corregir + documentar | Manejo genérico de `IntegrityError` |
 | A-31 | ACCIDENTAL | Corregir en modernización (solo volumen) | Cerrada (ronda 3, simulada): sin necesidad de masa↔volumen |
 | A-32 | PENDIENTE | Documentar sin especificar | Consulta a catálogo real (datos) |
@@ -1699,6 +1916,14 @@ consignada aquí para que no se pierda al no tener una entrada `A-NN` propia.
 | A-55 | DECISIÓN DE NEGOCIO | Implementado según spec 043 (`plan.md`/`tasks.md`) — `POST`/`PATCH /products` consolidan el árbol completo del producto en una transacción todo-o-nada; se retiraron receta/grupos de opciones/reordenamiento (3 de 5); variante individual (2 de 5) quedó excepcionada por `test_variantes_duplicadas.py` | Ninguna (auditoría de FR-007 ya ejecutada) |
 | A-56 | DECISIÓN DE NEGOCIO + CORRECCIÓN DE BUG | Implementado según spec 044 — revierte Decisión D5 (spec 028) para efectivo y transferencia sin comprobante: "Rechazar" ahora cancela el pedido completo y resuelve el intento de pago, con motivo; transferencia con comprobante sin cambios. Corrige además `selectedOrderId` obsoleto tras confirmar un pago (bug, sin decisión de negocio) | Ninguna |
 | A-57 | DECISIÓN DE NEGOCIO / BUG A SECAS | spec 040 — `_valid_now` atribuye las horas tras medianoche al día de inicio de la ventana, para todos los tipos de promoción; con `check()` nuevo en el script de CI, no retroactivo | Ninguna |
+| A-58 | DECISIÓN DE NEGOCIO | spec 063 — se elimina `Promotion.priority` (columna, desempate del motor, orden del listado, campo del formulario); con el bloqueo de solape real (A-59) no queda conflicto que desempatar | Ninguna |
+| A-59 | DECISIÓN DE NEGOCIO | spec 063 — el solape entre promociones pasa de advertencia (`find_overlaps`) a **bloqueo** (409): variante compartida + intersección simultánea de fecha, días y horas (dimensión abierta = todo su dominio) | Ninguna |
+| A-60 | DECISIÓN DE NEGOCIO | spec 063 — se elimina el alcance por categoría y la captura automática de productos futuros; el alcance se resuelve solo por la lista explícita de variantes (`promotion_variants`) | Ninguna |
+| A-61 | DECISIÓN DE NEGOCIO | spec 063 — se elimina el tipo `combo` y su selección explícita del código; columnas `combo_id` históricas y líneas de venta intactas; `combo` vigentes → `Finalizada`, sin migración automática | Ninguna |
+| A-62 | DECISIÓN DE NEGOCIO | spec 063 — tipos reducidos a `percent` + `package_price`; `qty_price`/`qty_price_presentation`/`fixed`/`combo` vigentes → `Finalizada` con aviso; solo `percent` se migra (conjunto de variantes, foto fija) | Ninguna |
+| A-63 | DECISIÓN DE NEGOCIO | spec 063 — se elimina la entidad `Presentation` y todo lo suyo (revierte la parte de modelo de datos de spec 040; se conserva A-57, la vigencia día/hora y el anuncio en menú QR) | Ninguna |
+| A-64 | DECISIÓN DE NEGOCIO | spec 063 — se persiste `applied_promotions` (descuento agregado + lista de promociones) en `sales`/`invoices`/`customer_orders` (+ `discount` en `customer_orders`); **resuelve A-29**; no retroactivo | Ninguna |
+| A-65 | DECISIÓN DE NEGOCIO | spec 063 — se deroga la regla "precio uniforme por presentación" (verificación con confirmación de spec 040 FR-017); es falsa en el catálogo real | Ninguna |
 
 ---
 
