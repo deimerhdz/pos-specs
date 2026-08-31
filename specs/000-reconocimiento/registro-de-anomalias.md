@@ -1588,6 +1588,41 @@ Verificado sin regresiones: 456/456 characterization tests de `pos-backend` y 46
 
 ---
 
+### A-57 — [DECISIÓN DE NEGOCIO — spec 040] `_valid_now` atribuye las horas posteriores a medianoche al día en que inicia la ventana, para todos los tipos de promoción
+
+**Qué cambia**: `app/api/v1/promotions/service.py::_valid_now` hoy compara `days_of_week` contra
+`now.weekday()` y la ventana horaria (`_in_time_window`) de forma independiente. Con una ventana que
+cruza medianoche (`start_time > end_time`, p. ej. `22:00`–`02:00`) y `days_of_week` restringido, una
+promoción vigente el lunes 23:00 deja de estarlo el lunes 00:30 (que el sistema lee como martes). A
+partir de esta spec, cuando `now.time()` cae en el tramo posterior a la medianoche de una ventana
+que cruza medianoche (`start_time > end_time` y `now.time() <= end_time`), el día que se compara
+contra `days_of_week` es el del día anterior — las horas tras medianoche pertenecen al día en que la
+ventana inició (spec 040 FR-004, CL-8). Afecta a **todos** los tipos (`percent`, `fixed`,
+`qty_price`, `combo`, `qty_price_presentation`): `_valid_now` es compartido.
+**Por qué cambia**: el comportamiento actual hace insatisfacible el "happy hour nocturno que cruza
+la medianoche" en los días configurados — la promoción se crea, se lista como activa y descuenta
+cero en media ventana, sin error (mismo patrón que la corrección previa de `_in_time_window` para la
+comparación de hora; este es el mismo defecto en la comparación de día). Ningún flujo de negocio
+depende de que una promoción nocturna se apague a la medianoche.
+**Quién tomó la decisión y cuándo**: propietario del repositorio (leonardogomez306@gmail.com),
+2026-08-26, en las Clarifications de
+[`specs/040-promociones-precio-por-presentacion/spec.md`](../040-promociones-precio-por-presentacion/spec.md)
+(CL-8, formalizado como FR-004); ratificado 2026-08-27 al detectarse durante `/speckit-analyze` que
+`_valid_now` no lo implementaba.
+**Funcionalidades afectadas**: la evaluación de vigencia de todas las promociones en los ~12 caminos
+de cobro/preview y en el anuncio del menú QR. `app/scripts/test_promotions_rules.py` (CI) sigue en
+verde: sus `check()` de `_valid_now` (líneas 76-80) usan ventanas normales y los de `_in_time_window`
+(92-96) prueban la función pura; se agrega un `check()` para la combinación "día restringido +
+ventana que cruza medianoche". Ningún test `"CONGELA comportamiento actual:"` cambia de cuerpo.
+**Clasificación**: DECISIÓN DE NEGOCIO / BUG A SECAS — corrige un comportamiento defectuoso y a la
+vez cambia el comportamiento observable de promociones existentes; se registra por el Principio II.
+**Tratamiento acordado**: implementar en la fase Foundational de
+[`specs/040-promociones-precio-por-presentacion/tasks.md`](../040-promociones-precio-por-presentacion/tasks.md)
+(tarea T009a), con test de la combinación en `test_promotions_rules.py` y en el char test de US1
+(T019). No retroactivo: no recalcula ninguna `Sale`/`SaleInvoice` ya emitida (Principio VII).
+
+---
+
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
 
 La entrada #1 de `memoria-historica.md` (2026-07-17, commit `8777acbc`) documenta que
@@ -1659,8 +1694,11 @@ consignada aquí para que no se pierda al no tener una entrada `A-NN` propia.
 | A-50 | BUG A SECAS confirmado | Corregido en spec 030 — mecanismo único de conversión UTC→hora del negocio, sin tocar datos históricos | Ninguna (autorizado y corregido, 2026-08-24) |
 | A-51 | DECISIÓN DE NEGOCIO | Implementado en spec 031 — longitud de contraseña 8-12, cierre de sesiones y correo de aviso tras cambio de contraseña | Ninguna |
 | A-52 | DECISIÓN DE NEGOCIO | Implementado en spec 035 — `checkout_and_send`/`approve_payment_attempt`/`confirm_cash_payment_attempt` fijan `status = 'pagada'`; backend (`tables_advanced.py`) y frontend (`PosTerminalStore`) protegen por `estado_cocina`, no por `status` | Ninguna |
+| A-53 | DECISIÓN DE NEGOCIO | Implementado en spec 038 — el carrito confirmado se borra físicamente en `submit_cart` en vez de conservarse como `status='confirmado'` | Ninguna |
+| A-54 | DECISIÓN DE NEGOCIO | Implementado en spec 039 — los `Cart` de la sesión se eliminan físicamente al liberarse la mesa, sin importar su `status` | Ninguna |
 | A-55 | DECISIÓN DE NEGOCIO | Implementado según spec 043 (`plan.md`/`tasks.md`) — `POST`/`PATCH /products` consolidan el árbol completo del producto en una transacción todo-o-nada; se retiraron receta/grupos de opciones/reordenamiento (3 de 5); variante individual (2 de 5) quedó excepcionada por `test_variantes_duplicadas.py` | Ninguna (auditoría de FR-007 ya ejecutada) |
 | A-56 | DECISIÓN DE NEGOCIO + CORRECCIÓN DE BUG | Implementado según spec 044 — revierte Decisión D5 (spec 028) para efectivo y transferencia sin comprobante: "Rechazar" ahora cancela el pedido completo y resuelve el intento de pago, con motivo; transferencia con comprobante sin cambios. Corrige además `selectedOrderId` obsoleto tras confirmar un pago (bug, sin decisión de negocio) | Ninguna |
+| A-57 | DECISIÓN DE NEGOCIO / BUG A SECAS | spec 040 — `_valid_now` atribuye las horas tras medianoche al día de inicio de la ventana, para todos los tipos de promoción; con `check()` nuevo en el script de CI, no retroactivo | Ninguna |
 
 ---
 
