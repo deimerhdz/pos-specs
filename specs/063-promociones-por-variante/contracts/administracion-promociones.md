@@ -1,84 +1,107 @@
-# Contrato: administración de promociones (CRUD, validaciones, estados)
+# Contrato: administración de promociones (CRUD multi-regla, validaciones, estados)
 
-Reemplaza el contrato de administración de la spec 013 y la parte de forma de la spec 040. Solo el
-**administrador del tenant** gestiona promociones (`require_tenant_admin`, ya vigente); el cajero
-solo visualiza (FR-019). Ver [research.md](../research.md) D2/D3/D4/D11/D16 y
-[data-model.md](../data-model.md) §"Reglas de validación".
+> **Reemplaza** la versión de este contrato escrita para el modelo plano — la que describe
+> exactamente lo que ya está implementado en `app/api/v1/promotions/{schemas,service,router}.py`
+> de la rama de feature `refactor/063-promociones-por-variante` (verificado 2026-09-01:
+> `PromotionCreate` en `schemas.py:104`, `_guard_variant_overlap` en `service.py:338`,
+> `_guard_package_is_discount` en `service.py:383`). Este documento describe el payload y las
+> validaciones **con el nivel de regla añadido** (FR-001, FR-001a). Solo el **administrador del
+> tenant** gestiona promociones (`require_tenant_admin`, sin cambio); el cajero solo visualiza
+> (FR-019, sin cambio).
 
 ---
 
 ## 1. Modelo de payload
 
+### `PromotionRuleIn` (nuevo — antes estos campos vivían directo en `PromotionCreate`)
+
+| Campo | Tipo | Reglas |
+|---|---|---|
+| `type` | `"percent"` \| `"package_price"` | obligatorio; ningún otro valor (FR-002) |
+| `value` | Decimal | `percent`: `0 < value <= 100`; `package_price`: `value > 0` |
+| `min_qty` | int | `>= 1` |
+| `variant_ids` | `list[UUID]` | **≥ 1** (FR-001a); sin repetidos dentro de la misma regla; cada uuid debe existir y ser de una variante del tenant |
+
 ### `PromotionCreate` (`POST /promotions`)
 
 | Campo | Tipo | Reglas |
 |---|---|---|
-| `name` | str | 1–255, único (409 legible) |
-| `description` | str \| null | ≤ 2000 |
-| `type` | `"percent"` \| `"package_price"` | obligatorio; ningún otro valor |
-| `value` | Decimal | `percent`: `0 < value <= 100`; `package_price`: `value > 0` |
-| `min_qty` | int | `>= 1` (`percent` suele ser 1; `package_price` = tamaño del grupo) |
-| `status` | `"draft"` \| `"active"` | default `"draft"`; `"finished"` prohibido al crear |
-| `starts_at` | datetime | **obligatoria** (FR-012) |
-| `ends_at` | datetime \| null | ≥ `starts_at` si viene |
-| `days_of_week` | str CSV `0..6` \| null | conjunto; null/vacío = todos los días |
-| `start_time` / `end_time` | time \| null | ambas o ninguna; admite cruce de medianoche |
-| `variant_ids` | `list[UUID]` | **≥ 1** (FR-001); sin repetidos; cada uuid debe existir y ser de una variante del tenant |
+| `name` | str | 1–255, único (409 legible) — **sin cambio**, es de la promoción |
+| `description` | str \| null | ≤ 2000 — sin cambio |
+| `status` | `"draft"` \| `"active"` | default `"draft"` — sin cambio |
+| `starts_at` | datetime | **obligatoria** (FR-012) — sin cambio |
+| `ends_at` | datetime \| null | ≥ `starts_at` si viene — sin cambio |
+| `days_of_week` | str CSV `0..6` \| null | sin cambio |
+| `start_time` / `end_time` | time \| null | sin cambio |
+| `rules` | `list[PromotionRuleIn]` | **NUEVO, reemplaza `type`/`value`/`min_qty`/`variant_ids` a nivel de promoción — ≥ 1 regla (FR-001)** |
 
-**Se eliminan del payload**: `priority`, `targets`, `combo_items`, `presentation_rules`,
-`confirm_precio_no_uniforme`, `confirm_sin_descuento` (research.md D3/D15, A-58/A-65).
+**Validación cruzada nueva en el payload** (antes de tocar la base de datos): ninguna
+`variant_ids` de una regla puede intersectar la `variant_ids` de otra regla del mismo `rules` —
+ver §2, `_guard_variant_overlap` caso FR-001a.
+
+**Se eliminan del payload** (sin cambio respecto del modelo plano, ya retirado ahí):
+`priority`, `targets`, `combo_items`, `presentation_rules`, `confirm_precio_no_uniforme`,
+`confirm_sin_descuento`.
 
 ### `PromotionShapeUpdate` (`PATCH /promotions/{id}/shape`, **solo en `draft`**)
 
-`type?`, `variant_ids?`. (Sin `targets`/`combo_items`/`presentation_rules`.)
+`rules?: list[PromotionRuleIn]` — **reemplaza la lista completa de reglas** de la promoción (no
+hay endpoint para editar una sola regla suelta: en `Borrador` todo el bloque de reglas es
+editable de una vez, FR-018). Antes: `type?`, `variant_ids?` sueltos.
 
-### `PromotionUpdate` (`PATCH /promotions/{id}`, escalares)
+### `PromotionUpdate` (`PATCH /promotions/{id}`, escalares de la promoción)
 
-`name?`, `description?`, `ends_at?`, `days_of_week?`, `start_time?`, `end_time?`.
-`value?` y `min_qty?` se aceptan en el schema pero el **servicio los rechaza (422)** si
-`status != "draft"` (FR-018). `starts_at` no editable tras crear.
+**Sin cambio de forma**: `name?`, `description?`, `ends_at?`, `days_of_week?`, `start_time?`,
+`end_time?`. Nunca tuvo `type`/`value`/`min_qty` en el modelo plano tampoco (FR-018 ya los excluía
+de este endpoint) — la diferencia ahora es que esos campos ni siquiera existen en `Promotion`,
+viven en `PromotionRule`, así que no hay nada que rechazar aquí: simplemente no están en el
+schema.
 
 ---
 
 ## 2. Validaciones de negocio (servicio)
 
-Todas en `promotions/service.py`, invocadas donde se indica:
+Todas en `promotions/service.py`:
 
 | Validación | Dónde | Respuesta | FR |
 |---|---|---|---|
-| `variant_ids` no vacía | `create`, `update_shape`, `change_status→active` | 422 "Una promoción necesita al menos una variante" | FR-001, US1-CA3 |
-| `percent` → `0 < value <= 100` | Pydantic + `ck_promotion_percent_range` | 422 | FR-002, US1-CA4 |
-| `package_price` → `value > 0`, `min_qty >= 1` | servicio + `ck_promotion_min_qty` | 422 | FR-002 |
-| **FR-016**: `package_price` y `value >= min_qty × (menor price entre las variantes del conjunto)` | `_guard_package_is_discount` en `create` / `update_shape` / `change_status→active` | **409** `{error, value, min_qty, cheapest_unit_price, variant_id}` | FR-016, SC-002 |
-| **FR-014**: conjunto comparte ≥1 variante con otra promo no terminal **y** fecha ∧ días ∧ horas se intersectan | `_guard_variant_overlap` en `create` / `update_shape` / `change_status→active` | **409** `{error, conflicts: [{promotion_id, promotion_name, variant_ids: [...]}]}` | FR-014, FR-014a, SC-003 |
-| **FR-018**: en `active`/`paused`, `value`/`min_qty` no editables | `update` (contra `promo.status` real) | 422 "Duplica la promoción para cambiar el valor o la cantidad" | FR-018, US5-CA2 |
-| **FR-018**: `type`/`variant_ids` solo en `draft` | `update_shape` (ya exige `draft`) | 409 "Solo una promoción en borrador puede cambiar de tipo o de conjunto" | FR-018 |
-| Máquina de estados | `change_status` + `PROMOTION_TRANSITIONS` (sin cambio) | 409 "Transición no permitida: {from} -> {to}" | FR-015, US5-CA3 |
-| Solo admin del tenant | `require_tenant_admin` en el router | 403 | FR-019, US5-CA5 |
+| `rules` no vacía | `create`, `update_shape`, `change_status→active` | 422 "Una promoción necesita al menos una regla" | FR-001 |
+| `variant_ids` de cada regla no vacía | ídem | 422 "Cada regla necesita al menos una variante" | FR-001a |
+| `percent` → `0 < value <= 100`; `package_price` → `value > 0`, `min_qty >= 1` | Pydantic + `ck_promotion_rule_*` | 422 | FR-002 |
+| **FR-001a**: ninguna variante se repite entre dos reglas de la **misma** promoción | `_guard_variant_overlap`, primer chequeo (antes de comparar contra otras promociones) | **409** `{error: "regla_variante_duplicada", rule_index_a, rule_index_b, variant_ids: [...]}` | FR-001a |
+| **FR-016**: por regla de tipo `package_price`, `value >= min_qty × (menor precio entre las variantes de esa regla)` | `_guard_package_is_discount`, una vez por regla | **409** `{error, rule_index, value, min_qty, cheapest_unit_price, variant_id}` | FR-016, SC-002 |
+| **FR-014**: una regla comparte ≥1 variante con una regla de **otra** promoción no terminal **y** las ventanas de sus respectivas promociones se intersectan | `_guard_variant_overlap`, segundo chequeo (sin cambio de criterio respecto del modelo plano, ahora comparando conjuntos de reglas en vez de conjuntos de promociones) | **409** `{error: "solape", conflicts: [{promotion_id, promotion_name, rule_id, variant_ids: [...]}]}` | FR-014, FR-014a, SC-003 |
+| **FR-018**: en `active`/`paused`, ningún campo de ninguna regla editable, ni agregar/quitar reglas | `update` rechaza el payload si trae `rules`; `update_shape` exige `draft` | 409 "Solo una promoción en borrador puede cambiar sus reglas" | FR-018 |
+| Máquina de estados | `change_status` + `PROMOTION_TRANSITIONS` (sin cambio) | 409 "Transición no permitida: {from} -> {to}" | FR-015 |
+| Solo admin del tenant | `require_tenant_admin` en el router (sin cambio) | 403 | FR-019 |
 
-### `_guard_variant_overlap` — detalle de la intersección (FR-014a)
+### `_guard_variant_overlap` — dos chequeos, en este orden
 
-Para `promo` (con `variant_ids`) contra cada candidata `c` en
-`status IN ('draft','active','paused')`, `c.id != promo.id`:
+**Chequeo 1 — intra-promoción (FR-001a, nuevo)**: para las reglas del payload que se está
+guardando (`rules` de `create`/`update_shape`), cualquier par `(rule_a, rule_b)` con
+`variant_ids_a ∩ variant_ids_b ≠ ∅` bloquea, **sin mirar fecha/día/hora** — las reglas de una misma
+promoción comparten vigencia por definición (viven en la misma fila de `promotions`), así que la
+intersección temporal es siempre 100% y no hace falta calcularla.
+
+**Chequeo 2 — inter-promoción (FR-014/FR-014a, mismo criterio que el modelo plano)**: para cada
+regla del payload contra cada regla `c` de otra promoción `p_c` en estado `draft`/`active`/
+`paused` (`p_c.id != promotion.id`):
 
 ```
-comparten_variante = variant_ids ∩ {pv.product_variant_id for pv in c.variants}  ≠ ∅
-fecha:   NOT (promo.starts_at.date() > (c.ends_at.date() if c.ends_at else +∞)
-             OR c.starts_at.date() > (promo.ends_at.date() if promo.ends_at else +∞))
-días:    (not promo.days_of_week) OR (not c.days_of_week)
-         OR ({d for d in promo.days_of_week.split(',')} ∩ {d for d in c.days_of_week.split(',')} ≠ ∅)
-horas:   (promo.start_time is None) OR (c.start_time is None)
-         OR _in_time_window(promo.start_time, c.start_time, c.end_time)
-         OR _in_time_window(c.start_time, promo.start_time, promo.end_time)
+comparten_variante = variant_ids ∩ {pv.product_variant_id for pv in c.variants} ≠ ∅
+fecha:   NOT (promotion.starts_at.date() > (p_c.ends_at.date() if p_c.ends_at else +∞)
+             OR p_c.starts_at.date() > (promotion.ends_at.date() if promotion.ends_at else +∞))
+días:    (not promotion.days_of_week) OR (not p_c.days_of_week)
+         OR ({d for d in promotion.days_of_week.split(',')} ∩ {d for d in p_c.days_of_week.split(',')} ≠ ∅)
+horas:   (promotion.start_time is None) OR (p_c.start_time is None)
+         OR _in_time_window(promotion.start_time, p_c.start_time, p_c.end_time)
+         OR _in_time_window(p_c.start_time, promotion.start_time, promotion.end_time)
 bloquea  = comparten_variante AND fecha AND días AND horas
 ```
 
-Se reutilizan `_in_time_window` (`service.py:78`), y la lógica de `_ranges_overlap` /
-`_csv_overlap` / `_times_overlap` (`service.py:708-727`) **acotada a intersección simultánea de
-las tres dimensiones** (hoy `find_overlaps` exige las tres pero devuelve advertencia; el cambio
-es que ahora bloquea y compara por variante compartida en vez de target — A-59). `find_overlaps`,
-`_scope_overlap`, `OverlapResponse`, `PromotionWithOverlaps` y el campo `overlaps` de las
-respuestas **se eliminan**.
+Idéntico al criterio que ya tenía el modelo plano, comparando `promotion`/`p_c` en vez de
+`promo`/`c` directamente — la única diferencia es de dónde sale `variant_ids` (de una regla, no de
+la promoción completa) y que el mensaje de conflicto ahora nombra también `rule_id`.
 
 ---
 
@@ -87,49 +110,52 @@ respuestas **se eliminan**.
 ### `PromotionResponse`
 
 ```
-id, name, description, type, value, status, min_qty,
+id, name, description, status,
 starts_at, ends_at, days_of_week, start_time, end_time,
-closed_by_refactor_at,                    # nuevo — marca de "finalizada por la migración" (FR-025)
-condition_text,                           # nuevo — variant_set_condition_text(promo) (FR-005)
-variants: [                               # nuevo — reemplaza targets/combo_items/presentation_rules
-  { product_variant_id, description,      #   "Producto - Variante"
-    unit_price }                          #   precio normal vigente (FR-005)
+closed_by_refactor_at,                    # sin cambio — marca de "finalizada por la migración" (FR-025)
+rules: [                                  # NUEVO — reemplaza type/value/min_qty/variants a nivel de promoción
+  {
+    id, type, value, min_qty,
+    condition_text,                       # variant_set_condition_text(rule) (FR-005)
+    variants: [
+      { product_variant_id, description, unit_price }
+    ]
+  }
 ]
 ```
 
-**`type` en la respuesta es `str` libre, no el enum de entrada**: las promociones que la migración
-`063a` pasó a `finished` conservan su `type` original (`combo` / `qty_price` /
-`qty_price_presentation` / `fixed`, FR-025) y el listado —incluido el aviso
-`?closed_by_refactor=true`— debe poder serializarlas. Solo `PromotionCreate` /
-`PromotionShapeUpdate` restringen la entrada a `{percent, package_price}`. Para una promoción
-`finished` de tipo viejo, `condition_text` puede ser `null` y `variants` vacío.
+**Compatibilidad con promociones ya `finished` del modelo plano** (migradas por `063a`, o cerradas
+por `063c` si llegaron a existir promociones `finished` sin ninguna fila resultante en
+`promotion_rules` — no debería ocurrir porque el paso de datos de `063c` crea una regla por cada
+fila de `promotions` sin condicionar por `status`, así que toda promoción, incluida una `finished`,
+termina con exactamente una regla que conserva su `type`/`value`/`min_qty` histórico): se serializan
+igual, con `rules` de longitud 1.
 
-**Se eliminan**: `priority`, `targets`, `combo_items`, `presentation_rules`, `overlaps`.
+**Se eliminan** (respecto del modelo plano): `type`, `value`, `min_qty`, `condition_text` y
+`variants` a nivel de promoción — se mueven dentro de cada elemento de `rules`.
 
 ### Endpoints (`/promotions`)
 
-| Verbo | Ruta | Cambio |
+| Verbo | Ruta | Cambio respecto del modelo plano |
 |---|---|---|
-| GET | `/promotions` | `list_query` ordena por `name` (ya no `priority`). Nuevo query param `closed_by_refactor: bool` → filtra `closed_by_refactor_at IS NOT NULL` (aviso de FR-025). `X-Server-Time` intacto (A-09). |
-| POST | `/promotions` | payload nuevo; 409 de FR-014 / FR-016 / nombre duplicado. Respuesta `PromotionResponse` (sin `overlaps`). |
-| PATCH | `/promotions/{id}` | escalares; 422 de FR-018. |
-| PATCH | `/promotions/{id}/shape` | `type` / `variant_ids`; solo `draft`; revalida FR-014 / FR-016. |
-| PATCH | `/promotions/{id}/status` | máquina de estados; `→ active` revalida FR-014 / FR-016 / conjunto no vacío. |
-| POST | `/promotions/{id}/duplicate` | copia en `draft` con mismo tipo/valor/`min_qty`/conjunto/vigencia (FR-017). |
-| DELETE | `/promotions/{id}` | sin cambio (204). |
+| GET | `/promotions` | Sin cambio de query params (`closed_by_refactor`, `X-Server-Time`). `PromotionResponse` ahora anida `rules`. |
+| POST | `/promotions` | Payload con `rules: list[PromotionRuleIn]`; 409 de FR-001a (nuevo) / FR-014 / FR-016 (por regla); 409 de nombre duplicado sin cambio. |
+| PATCH | `/promotions/{id}` | Sin cambio de forma — solo campos de vigencia/nombre. |
+| PATCH | `/promotions/{id}/shape` | `rules` completo reemplaza a `type`/`variant_ids`; solo `draft`; revalida FR-001a / FR-014 / FR-016 sobre el `rules` nuevo completo. |
+| PATCH | `/promotions/{id}/status` | Máquina de estados sin cambio; `→ active` revalida FR-001a / FR-014 / FR-016 sobre **todas** las reglas actuales de la promoción. |
+| POST | `/promotions/{id}/duplicate` | Copia en `draft` con **todas** las reglas de la promoción (tipo/valor/`min_qty`/conjunto de cada una) + misma vigencia (FR-017). |
+| DELETE | `/promotions/{id}` | Sin cambio (204; cascada borra `promotion_rules` y sus `promotion_variants`). |
 
-`record_audit` sigue registrando `create`/`update`/`update_shape`/`status`/`duplicate`/`delete`.
-El "historial de modificaciones" (A-42) **no se construye ni se expone** (clarification
-2026-08-31).
+`record_audit` sigue registrando `create`/`update`/`update_shape`/`status`/`duplicate`/`delete` —
+sin cambio de granularidad (a nivel de promoción, no de regla individual).
 
 ---
 
 ## 4. Selección del conjunto (FR-004) — solo backend-relevante
 
-El backend recibe y guarda **`variant_ids`** (lista concreta). Los filtros "por producto", "por
-categoría" y "por texto de presentación/nombre" son **exclusivamente del frontend** para poblar el
-selector (`contracts/superficies-consumo.md` §3). El backend **no** guarda ningún filtro y **no**
-re-resuelve el conjunto: una variante creada después en una categoría que se usó como filtro
-**no** entra en la promoción (FR-003, US1-CA2). Para ayudar al selector, el frontend puede usar
-los endpoints de catálogo ya existentes (`GET /catalog/...`, `GET /products`) — no se agrega
-ninguno.
+**Sin cambio de principio, ahora por regla**: el backend recibe y guarda `variant_ids` **dentro de
+cada regla**. Los filtros "por producto", "por categoría" y "por texto" siguen siendo
+exclusivamente del frontend para poblar el selector de **una** regla a la vez
+(`contracts/superficies-consumo.md` §3). El backend no guarda ningún filtro y no re-resuelve el
+conjunto de ninguna regla: una variante creada después en una categoría usada como filtro no entra
+sola en ninguna regla existente (FR-003, US1-CA3).

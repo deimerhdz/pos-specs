@@ -173,53 +173,97 @@ Línea base del refactor, tomada del código en producción:
 - Q: ¿La entidad `Presentation` sobrevive? → A: No. Se **elimina** el modelo de presentaciones
   (backend y frontend); las reglas de promoción usan directamente `ProductVariant` (FR-027).
 
+### Session 2026-09-01
+
+- Q: ¿Un límite de cantidad de promociones por plan de suscripción (p. ej. básico = 1,
+  estándar = 3, avanzado = ilimitadas) exige reabrir FR-001 para separar la vigencia/estado de
+  la combinación (tipo, valor, cantidad mínima, conjunto de variantes)? → A: **Sí, de forma
+  acotada**. Se introduce **`Regla`** como entidad hija de **`Promoción`**: la `Promoción`
+  DEBE tener vigencia (fecha, días, hora) y estado, y agrupa **una o más** `Regla`; cada
+  `Regla` DEBE tener exactamente una combinación (tipo, valor, cantidad mínima) y su propio
+  conjunto de variantes (FR-001, FR-001a). Todas las reglas de una promoción comparten su
+  vigencia y su estado — no hay vigencia ni estado por regla. Esto resuelve el caso real de
+  Springfield (los seis tramos "2X" comparten vigencia lunes-jueves): se modelan como **una**
+  promoción con seis reglas, pausable/editable en vigencia de una sola vez.
+- Q: Si una promoción ahora puede agrupar varias reglas, ¿qué pasa con el límite por plan de
+  suscripción que motivó esta pregunta? → A: El límite (si se implementa como extensión de la
+  spec 033) DEBE contar **reglas activas**, no filas de `Promoción` — de lo contrario un
+  tenant básico podría empaquetar las seis reglas de Springfield bajo una sola promoción y
+  obtener el mismo poder que un plan avanzado, precisamente el caso de uso real, no uno
+  forzado. Ver Out of Scope.
+- Q: ¿Puede una variante pertenecer a dos reglas de la misma promoción? → A: No. Dentro de una
+  misma promoción, los conjuntos de variantes de sus reglas DEBEN ser disjuntos entre sí
+  (FR-001a): dos reglas de una misma promoción comparten vigencia por definición, así que si
+  compartieran también una variante, esa variante quedaría sujeta a dos configuraciones
+  simultáneas sin ningún criterio de desempate — el mismo problema que FR-014 evita entre
+  promociones distintas.
+- Q: ¿Cómo se resuelve la carga de trabajo de crear/editar las seis reglas del catálogo de
+  Springfield? → A: La creación por lote queda resuelta por el propio modelo: el formulario de
+  una promoción permite capturar sus N reglas (cada una con su propio tipo/valor/conjunto) en
+  una sola sesión antes de guardar. El mantenimiento (pausar, extender vigencia, ajustar
+  días/horas) también queda resuelto por el modelo, sin necesidad de acciones masivas
+  separadas: al vivir en la promoción, un solo cambio afecta a todas sus reglas a la vez
+  (FR-018).
+
 ---
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - El administrador arma una promoción sobre un conjunto explícito de variantes (Priority: P1)
+### User Story 1 - El administrador arma una promoción con una o varias reglas sobre conjuntos explícitos de variantes (Priority: P1)
 
-El administrador del tenant crea una promoción, elige un **tipo** (porcentaje o precio de
-paquete), un **valor** y una **cantidad mínima**, y luego selecciona **qué variantes** entran
-en el conjunto elegible. Para elegirlas dispone de filtros por producto, categoría y texto de
+El administrador del tenant crea una promoción: define su vigencia (fechas, días, horario) y
+luego agrega **una o más reglas**. Para cada regla elige un **tipo** (porcentaje o precio de
+paquete), un **valor**, una **cantidad mínima**, y selecciona **qué variantes** entran en su
+conjunto elegible. Para elegirlas dispone de filtros por producto, categoría y texto de
 presentación **solo como ayuda de selección**: lo que se guarda es la lista concreta de
-variantes, no el filtro. Ve, antes de guardar, un resumen legible: el tipo, la condición
-("Llevando 2 pagas $12.000"), y la lista de variantes incluidas con su precio normal.
+variantes de esa regla, no el filtro. Puede agregar tantas reglas como necesite en la misma
+sesión del formulario, siempre que sus conjuntos de variantes no se toquen entre sí. Ve, antes
+de guardar, un resumen legible por cada regla: el tipo, la condición ("Llevando 2 pagas
+$12.000"), y la lista de variantes incluidas con su precio normal.
 
 **Why this priority**: sin esto no existe ninguna promoción que evaluar; es el punto de entrada
 de todo lo demás y la razón del refactor (pasar de "por producto" a "por conjunto de
-variantes").
+variantes"), y la capacidad de agregar varias reglas en una sesión es lo que evita repetir el
+formulario completo para promociones "hermanas" que comparten vigencia (p. ej. los seis tramos
+de precio "2X" de Springfield).
 
-**Independent Test**: crear una promoción "2X Pequeños con licor $12.000", agregar al conjunto
-las ocho variantes Pequeño con licor del catálogo, ver el resumen, guardar, y comprobar que la
-promoción queda en `Borrador` con esas ocho variantes.
+**Independent Test**: crear una promoción "2X entre semana" con vigencia lunes a jueves, y
+agregarle en la misma sesión las seis reglas de precio de paquete (Pequeños $12.000, Medianos
+$17.000, Grandes $22.000, Extra grandes $27.000, Baldes $31.000, Litros $41.000), cada una con
+el conjunto de variantes con licor de su tamaño; ver el resumen de las seis, guardar, y
+comprobar que la promoción queda en `Borrador` con sus seis reglas.
 
 **Acceptance Scenarios**:
 
-1. **Given** el administrador en el formulario de nueva promoción, **When** elige tipo "precio
-   de paquete", valor $12.000, cantidad mínima 2 y agrega ocho variantes al conjunto, **Then**
-   el resumen muestra "Llevando 2 de cualquiera de estas 8 variantes pagas $12.000" y la lista
-   de las ocho con su precio normal.
-2. **Given** el administrador usa el filtro "categoría = Granizados con licor" para poblar el
-   selector, **When** guarda, **Then** se guarda la lista concreta de variantes visibles en ese
-   momento; una variante creada después en esa categoría **no** entra sola en la promoción.
-3. **Given** una promoción de tipo porcentaje, **When** el administrador intenta guardarla con
-   el conjunto de variantes vacío, **Then** el sistema lo impide y explica que una promoción
-   necesita al menos una variante.
-4. **Given** el administrador define un valor porcentual mayor a 100, **When** intenta guardar,
-   **Then** el sistema lo rechaza.
-5. **Given** una promoción recién creada, **When** el administrador la revisa, **Then** su
-   estado es `Borrador` y todavía no aplica ningún descuento.
+1. **Given** el administrador en el formulario de nueva promoción, **When** define la vigencia
+   y agrega una regla con tipo "precio de paquete", valor $12.000, cantidad mínima 2 y ocho
+   variantes en su conjunto, **Then** el resumen de esa regla muestra "Llevando 2 de cualquiera
+   de estas 8 variantes pagas $12.000" y la lista de las ocho con su precio normal.
+2. **Given** el administrador ya agregó una regla con una variante en su conjunto, **When**
+   agrega una segunda regla e intenta incluir esa misma variante, **Then** el sistema lo impide
+   y explica que la variante ya pertenece a otra regla de esta misma promoción.
+3. **Given** el administrador usa el filtro "categoría = Granizados con licor" para poblar el
+   selector de una regla, **When** guarda, **Then** se guarda la lista concreta de variantes
+   visibles en ese momento; una variante creada después en esa categoría **no** entra sola en
+   la regla.
+4. **Given** una promoción con una regla de tipo porcentaje, **When** el administrador intenta
+   guardarla con el conjunto de variantes de esa regla vacío, **Then** el sistema lo impide y
+   explica que cada regla necesita al menos una variante.
+5. **Given** el administrador define en una regla un valor porcentual mayor a 100, **When**
+   intenta guardar, **Then** el sistema lo rechaza.
+6. **Given** una promoción recién creada con una o varias reglas, **When** el administrador la
+   revisa, **Then** su estado es `Borrador` y todavía no aplica ningún descuento.
 
 ---
 
 ### User Story 2 - El cajero cobra un pedido y el paquete combina variantes distintas del conjunto (Priority: P1)
 
 Al cobrar, el sistema reúne todas las unidades del pedido cuyas variantes pertenecen al
-conjunto de una promoción vigente, arma tantos **grupos completos** de `minQuantity` unidades
-como permita el total, y aplica el descuento solo a esos grupos. Las unidades del grupo se
-eligen por **consumo codicioso descendente de precio** (favorece al cliente); el remanente se
-cobra a precio normal. El resultado no depende del orden de las líneas del pedido.
+conjunto de una **regla** cuya promoción está vigente, arma tantos **grupos completos** de
+`minQuantity` unidades como permita el total, y aplica el descuento solo a esos grupos. Las
+unidades del grupo se eligen por **consumo codicioso descendente de precio** (favorece al
+cliente); el remanente se cobra a precio normal. El resultado no depende del orden de las
+líneas del pedido.
 
 **Why this priority**: es el problema de negocio central — hoy dos variantes distintas del
 mismo tamaño no combinan para un precio de paquete configurado por producto.
@@ -265,10 +309,11 @@ unidades y verificar $20.000; en cualquier orden de captura.
 ### User Story 3 - Vigencia por días y franja horaria; sin solapamiento real entre promociones (Priority: P2)
 
 El administrador define en qué días de la semana y en qué franja horaria aplica la promoción
-(la franja puede cruzar la medianoche). El sistema impide crear o activar una segunda
-promoción que comparta variantes con otra no terminal **si además sus ventanas de fecha, día y
-hora se intersectan** — un solapamiento que dejaría a una línea entre dos promociones al mismo
-tiempo.
+(la franja puede cruzar la medianoche); esa vigencia rige para todas las reglas de la
+promoción. El sistema impide crear o activar una regla que comparta variantes con otra regla
+no terminal —de la misma promoción o de otra— **si además sus ventanas de fecha, día y hora se
+intersectan** — un solapamiento que dejaría a una línea entre dos reglas al mismo tiempo. Entre
+reglas de la misma promoción esto siempre bloquea, porque comparten vigencia idéntica.
 
 **Why this priority**: sin control de solapamiento real, dos promociones podrían competir por
 la misma línea y el resultado sería ambiguo (ya no hay prioridad que lo resuelva).
@@ -330,31 +375,42 @@ volver a abrir fuera de horario y comprobar que el anuncio ya no aparece.
 
 ### User Story 5 - Duplicar, editar una promoción activa, cambiar de estado (Priority: P2)
 
-El administrador puede duplicar una promoción (la copia nace en `Borrador` con el mismo
-conjunto y condición), editar campos no estructurales de una promoción `Activa` (nombre,
-descripción, fin de vigencia, días y horas) y moverla por la máquina de estados
-`Borrador → Activa → Pausada → Finalizada`. `Finalizada` es terminal.
+El administrador puede duplicar una promoción completa (la copia nace en `Borrador` con las
+mismas reglas y la misma vigencia), editar en una promoción `Activa` solo los campos que le
+pertenecen a ella (nombre, descripción, fin de vigencia, días y horas — no a sus reglas
+individuales) y moverla por la máquina de estados `Borrador → Activa → Pausada → Finalizada`.
+`Finalizada` es terminal y afecta a todas sus reglas por igual.
 
 **Why this priority**: es la operación diaria del administrador; sin duplicar no hay forma de
-cambiar el tipo o el conjunto de una promoción que ya estuvo activa.
+cambiar el tipo o el conjunto de las reglas de una promoción que ya estuvo activa. Como pausar,
+activar o extender la vigencia son cambios a la promoción (no a cada regla), una sola acción ya
+cubre todas sus reglas — sin esto, el administrador de Springfield tendría que repetir la
+operación seis veces cada vez que quiera pausar o mover el horario de "2X entre semana".
 
-**Independent Test**: activar una promoción, editar su nombre y su fin de vigencia (permitido),
-intentar cambiar su valor y su conjunto de variantes (bloqueado), duplicarla, y en la copia
-cambiar el valor.
+**Independent Test**: activar una promoción con varias reglas, editar su nombre y su fin de
+vigencia (permitido, afecta a todas sus reglas), intentar cambiar el valor o el conjunto de una
+de sus reglas (bloqueado), duplicar la promoción completa, y en la copia cambiar el valor de
+una regla.
 
 **Acceptance Scenarios**:
 
-1. **Given** una promoción `Activa`, **When** el administrador edita nombre, descripción, fin
-   de vigencia, días u horas, **Then** el cambio se guarda.
+1. **Given** una promoción `Activa` con varias reglas, **When** el administrador edita nombre,
+   descripción, fin de vigencia, días u horas, **Then** el cambio se guarda y aplica a todas
+   sus reglas por igual.
 2. **Given** una promoción `Activa`, **When** el administrador intenta cambiar el tipo, el
-   valor, la cantidad mínima o el conjunto de variantes, **Then** el sistema lo impide y sugiere
-   duplicar.
+   valor, la cantidad mínima o el conjunto de variantes de una de sus reglas, o agregar/quitar
+   una regla, **Then** el sistema lo impide y sugiere duplicar la promoción.
 3. **Given** una promoción `Finalizada`, **When** el administrador intenta reactivarla, **Then**
    el sistema lo impide (estado terminal).
-4. **Given** una promoción `Activa`, **When** el administrador la duplica, **Then** la copia
-   nace en `Borrador` con el mismo conjunto y condición y un nombre distinto.
-5. **Given** un usuario cajero, **When** intenta crear o editar una promoción, **Then** el
-   sistema lo impide (solo el administrador del tenant gestiona promociones).
+4. **Given** una promoción `Activa` con seis reglas, **When** el administrador la duplica,
+   **Then** la copia nace en `Borrador` con las mismas seis reglas y la misma vigencia, y un
+   nombre distinto.
+5. **Given** una promoción `Activa` con seis reglas, **When** el administrador la pausa,
+   **Then** las seis reglas dejan de aplicar descuento con una sola acción, sin pausarlas una
+   por una.
+6. **Given** un usuario cajero, **When** intenta crear o editar una promoción o alguna de sus
+   reglas, **Then** el sistema lo impide (solo el administrador del tenant gestiona
+   promociones).
 
 ---
 
@@ -376,9 +432,9 @@ verificar el estado y la forma de cada una después.
 **Acceptance Scenarios**:
 
 1. **Given** una promoción `percent` del 10% sobre la categoría "Granizados", **When** se migra,
-   **Then** queda como una promoción de tipo porcentaje, valor 10, `minQuantity` 1, con el
-   conjunto = todas las variantes activas de esa categoría al momento de migrar, y conserva su
-   estado y su vigencia.
+   **Then** queda como una `Promoción` con **una** `Regla` de tipo porcentaje, valor 10,
+   `minQuantity` 1, con el conjunto = todas las variantes activas de esa categoría al momento de
+   migrar, y la promoción conserva su estado y su vigencia.
 2. **Given** una promoción `combo` "1 Granizado Litro + 1 Cono por $30.000", **When** se migra,
    **Then** pasa a `Finalizada` y aparece en el aviso de promociones a recrear; sus líneas de
    venta históricas no cambian.
@@ -412,21 +468,29 @@ verificar el estado y la forma de cada una después.
   precio efectivo solo cambia al alcanzar la cantidad en el carrito (FR-022).
 - **Descuento que dejaría el total en cero o negativo**: el descuento se topa en el precio
   normal de las unidades a las que aplica; la línea nunca baja de $0 (FR-009).
-- **Variante eliminada del catálogo**: una variante borrada sale del conjunto de toda promoción
-  que la incluyera; si el conjunto queda vacío, la promoción deja de aplicar descuento pero no
-  cambia de estado sola (FR-011).
-- **Edición de una promoción activa**: quedan bloqueados tipo, valor, cantidad mínima y conjunto
-  de variantes, porque una promoción que ya explicó el descuento de una venta reescribiría esa
-  historia si cambiara de forma (FR-018).
+- **Variante eliminada del catálogo**: una variante borrada sale del conjunto de toda regla que
+  la incluyera; si el conjunto de una regla queda vacío, esa regla deja de aplicar descuento
+  pero no cambia el estado de su promoción sola. Si **todas** las reglas de una promoción
+  quedan sin variantes elegibles, la promoción sigue `Activa` pero no genera ningún descuento
+  (FR-011).
+- **Edición de una promoción activa**: quedan bloqueados el tipo, el valor, la cantidad mínima y
+  el conjunto de variantes de **cada regla**, además de agregar o quitar reglas, porque una
+  promoción que ya explicó el descuento de una venta reescribiría esa historia si cambiara de
+  forma. Solo los campos de la promoción (nombre, descripción, fin de vigencia, días, horas)
+  siguen editables (FR-018).
 - **Ventana horaria que cruza la medianoche con días restringidos**: las horas posteriores a la
   medianoche pertenecen al día de inicio de la ventana para evaluar `daysOfWeek` y `endAt`
   (corrección A-57, se mantiene) (FR-013).
-- **Solapamiento parcial en el tiempo**: dos promociones que comparten una variante pero cuyas
-  ventanas horarias no se intersectan pueden coexistir activas (FR-014).
+- **Solapamiento parcial en el tiempo**: dos reglas (de promociones distintas) que comparten una
+  variante pero cuyas ventanas horarias no se intersectan pueden coexistir activas (FR-014).
 - **Solapamiento con una dimensión abierta**: una promoción sin franja horaria (o sin días
   restringidos, o sin fecha de fin) cubre todo ese dominio, así que se intersecta con cualquier
-  franja/día/fecha de otra promoción sobre una variante compartida y el bloqueo aplica
-  (FR-014a).
+  franja/día/fecha de otra promoción sobre una variante compartida por alguna de sus reglas, y
+  el bloqueo aplica (FR-014a).
+- **Dos reglas de la misma promoción con variante compartida**: al guardar o activar, el sistema
+  bloquea si alguna variante aparece en más de una regla de la misma promoción — comparten
+  vigencia por definición, así que compartir variante siempre sería un conflicto simultáneo
+  (FR-001a).
 
 ---
 
@@ -434,38 +498,47 @@ verificar el estado y la forma de cada una después.
 
 ### Modelo y configuración
 
-- **FR-001**: Una promoción DEBE tener exactamente **una** combinación de (tipo, valor, cantidad
+- **FR-001**: Una **Promoción** DEBE tener vigencia (fecha de inicio, fecha de fin opcional,
+  conjunto de días, ventana horaria) y estado, y DEBE agrupar **una o más `Regla`**. Todas las
+  reglas de una promoción comparten la vigencia y el estado de esa promoción — no existe
+  vigencia ni estado por regla; editar o pausar la promoción afecta a todas sus reglas a la vez.
+- **FR-001a**: Una **Regla** DEBE tener exactamente **una** combinación de (tipo, valor, cantidad
   mínima) y un **conjunto** de una o más variantes de producto. La pertenencia de una variante
-  al conjunto NO lleva ningún parámetro de precio propio.
-- **FR-002**: Los tipos DEBEN ser **porcentaje** (`value` = porcentaje de descuento, 0 <
-  `value` ≤ 100) y **precio de paquete** (`value` = precio total en COP de `minQuantity`
+  al conjunto NO lleva ningún parámetro de precio propio. Dentro de una misma promoción, los
+  conjuntos de variantes de sus reglas DEBEN ser **disjuntos entre sí**: una variante no puede
+  pertenecer a dos reglas de la misma promoción, porque comparten vigencia por definición y
+  quedaría sujeta a dos configuraciones simultáneas sin ningún criterio de desempate.
+- **FR-002**: Los tipos de **regla** DEBEN ser **porcentaje** (`value` = porcentaje de descuento,
+  0 < `value` ≤ 100) y **precio de paquete** (`value` = precio total en COP de `minQuantity`
   unidades). No DEBE existir ningún otro tipo. Los identificadores `buy_x_get_y`, `qty_price`,
   `qty_price_presentation`, `combo` y `fixed` se retiran del sistema (`buy_x_get_y` y
   `qty_price` estaban reservados; `qty_price_presentation`, `combo` y `fixed` estaban
   implementados — ver FR-024, FR-025).
-- **FR-003**: El alcance de una promoción DEBE resolverse **solo** por la lista explícita de
-  variantes del conjunto. NO DEBE existir alcance por producto, por categoría, ni por
+- **FR-003**: El alcance de una **regla** DEBE resolverse **solo** por la lista explícita de
+  variantes de su conjunto. NO DEBE existir alcance por producto, por categoría, ni por
   presentación, ni ningún mecanismo que incluya automáticamente variantes creadas después.
 - **FR-004**: La interfaz de administración DEBE ofrecer filtros por producto, categoría y texto
-  de presentación **únicamente como ayuda para poblar el selector de variantes**; lo que se
-  guarda es la lista concreta de variantes.
-- **FR-005**: Antes de confirmar la creación o la edición, la interfaz DEBE mostrar un resumen
-  legible: el tipo, la condición en lenguaje llano y la lista de variantes del conjunto con su
-  precio normal vigente.
-- **FR-006**: Para el tipo **precio de paquete**, el descuento de un grupo completo DEBE ser
-  (suma de los precios normales de las `minQuantity` unidades que el grupo consume) − `value`.
-  Con `minQuantity` = 1, la promoción DEBE comportarse como un precio unitario especial de
-  `value`. Para el tipo **porcentaje**, el descuento de un grupo completo DEBE ser
-  `value` % × (suma de los precios normales de las `minQuantity` unidades que el grupo consume),
-  redondeado a peso.
+  de presentación **únicamente como ayuda para poblar el selector de variantes de una regla**;
+  lo que se guarda es la lista concreta de variantes de esa regla.
+- **FR-005**: Antes de confirmar la creación o la edición de una promoción, la interfaz DEBE
+  mostrar un resumen legible de **cada una de sus reglas**: el tipo, la condición en lenguaje
+  llano y la lista de variantes del conjunto con su precio normal vigente, además de la vigencia
+  compartida de la promoción (días, horario, fechas).
+- **FR-006**: Para el tipo **precio de paquete**, el descuento de un grupo completo (formado a
+  partir del conjunto de **una regla**) DEBE ser (suma de los precios normales de las
+  `minQuantity` unidades que el grupo consume) − `value`. Con `minQuantity` = 1, la regla DEBE
+  comportarse como un precio unitario especial de `value`. Para el tipo **porcentaje**, el
+  descuento de un grupo completo DEBE ser `value` % × (suma de los precios normales de las
+  `minQuantity` unidades que el grupo consume), redondeado a peso.
 - **FR-007**: Para **ambos** tipos, el descuento DEBE aplicarse ÚNICAMENTE a grupos completos de
-  `minQuantity` unidades elegibles (`total_unidades_elegibles // minQuantity` grupos). Toda
-  unidad sobrante DEBE cobrarse a precio normal.
-- **FR-008**: Cuando el conjunto contiene variantes de precio unitario distinto, las unidades
-  que forman los grupos completos DEBEN elegirse por **precio unitario descendente** (el grupo
-  consume primero las más caras), con desempate por identificador de variante ascendente y luego
-  por identificador de línea ascendente, de modo que el total y el reparto por línea NO dependan
-  del orden de las líneas del pedido.
+  `minQuantity` unidades elegibles del conjunto de una regla
+  (`total_unidades_elegibles // minQuantity` grupos). Toda unidad sobrante DEBE cobrarse a
+  precio normal.
+- **FR-008**: Cuando el conjunto de una regla contiene variantes de precio unitario distinto, las
+  unidades que forman los grupos completos DEBEN elegirse por **precio unitario descendente**
+  (el grupo consume primero las más caras), con desempate por identificador de variante
+  ascendente y luego por identificador de línea ascendente, de modo que el total y el reparto por
+  línea NO dependan del orden de las líneas del pedido.
 - **FR-008a**: El descuento de un grupo (FR-006, redondeado a peso) DEBE repartirse entre sus
   líneas contribuyentes, para **ambos** tipos, repartiendo el **importe cobrado**: cada línea
   contribuyente cobra `floor(precio_normal_de_sus_unidades_del_grupo − descuento_grupo ×
@@ -480,82 +553,91 @@ verificar el estado y la forma de cada una después.
   $0. En el cobro, un grupo NO DEBE aplicarse a una línea si el resultado deja a esa línea con
   un total **mayor** que sin promoción.
 - **FR-010**: Un paquete DEBE poder formarse con cualquier combinación de unidades cuyas
-  variantes pertenezcan al conjunto de la promoción, sin importar de qué producto provenga cada
+  variantes pertenezcan al conjunto de **una regla**, sin importar de qué producto provenga cada
   unidad. Se deroga la regla "una promoción por presentación aplica a todos los productos con
   esa presentación".
 - **FR-011**: Una variante **desactivada** o **eliminada** NO DEBE contar como unidad elegible.
-  Si el conjunto de una promoción activa queda sin ninguna variante elegible, la promoción DEJA
-  de aplicar descuento pero NO cambia de estado automáticamente.
+  Si el conjunto de una regla activa queda sin ninguna variante elegible, esa regla DEJA de
+  aplicar descuento pero NO cambia el estado de su promoción automáticamente. Si **todas** las
+  reglas de una promoción quedan así, la promoción sigue `Activa` sin generar ningún descuento.
 
 ### Vigencia
 
-- **FR-012**: La promoción DEBE tener: nombre, descripción opcional, fecha de inicio
+- **FR-012**: La **promoción** DEBE tener: nombre, descripción opcional, fecha de inicio
   (obligatoria), fecha de fin (opcional), un **conjunto** de días de la semana en los que
   aplica (opcional; vacío = todos los días) y hora de inicio y fin (opcionales, ambas o
-  ninguna).
+  ninguna). Estos campos son de la promoción, no de sus reglas.
 - **FR-013**: Cuando la promoción define hora de inicio y fin, el sistema DEBE permitir que la
   ventana cruce la medianoche (p. ej. 22:00–02:00). Días y horas se evalúan en la zona horaria
   del tenant. Cuando la ventana cruza la medianoche, las horas posteriores a la medianoche DEBEN
   atribuirse al día en que **inicia** la ventana para evaluar `daysOfWeek` y la fecha de fin
   (corrección A-57, se conserva).
-- **FR-014**: El sistema NO DEBE permitir crear ni activar una promoción cuyo conjunto comparta
-  al menos una variante con otra promoción en estado `Borrador`, `Activa` o `Pausada` **si
-  además** sus rangos de fecha, sus conjuntos de días y sus ventanas horarias **se
-  intersectan**. El mensaje DEBE nombrar la promoción en conflicto y la(s) variante(s)
-  compartida(s). Si las ventanas NO se intersectan, la coexistencia DEBE permitirse.
-- **FR-014a**: Al evaluar la intersección de FR-014, una dimensión **no definida** DEBE tratarse
-  como que cubre todo su dominio: sin franja horaria = 00:00–24:00 (todas las horas); conjunto
-  de días vacío = los siete días; sin fecha de fin = vigencia indefinida. Una dimensión abierta
-  se intersecta con cualquier valor de esa misma dimensión en la otra promoción. El bloqueo solo
-  se produce cuando las **tres** dimensiones (fecha, días y horas) se intersectan a la vez y hay
-  al menos una variante compartida.
+- **FR-014**: El sistema NO DEBE permitir crear ni activar una **regla** cuyo conjunto comparta
+  al menos una variante con otra regla —de la misma promoción o de otra— en estado `Borrador`,
+  `Activa` o `Pausada` **si además** los rangos de fecha, los conjuntos de días y las ventanas
+  horarias de sus respectivas promociones **se intersectan**. Entre reglas de la **misma**
+  promoción esto siempre bloquea (comparten vigencia idéntica, FR-001a). El mensaje DEBE nombrar
+  la promoción y la regla en conflicto y la(s) variante(s) compartida(s). Si las ventanas de dos
+  reglas de promociones distintas NO se intersectan, la coexistencia DEBE permitirse.
+- **FR-014a**: Al evaluar la intersección de FR-014, una dimensión **no definida** de la
+  vigencia de una promoción DEBE tratarse como que cubre todo su dominio: sin franja horaria =
+  00:00–24:00 (todas las horas); conjunto de días vacío = los siete días; sin fecha de fin =
+  vigencia indefinida. Una dimensión abierta se intersecta con cualquier valor de esa misma
+  dimensión en la otra promoción. El bloqueo solo se produce cuando las **tres** dimensiones
+  (fecha, días y horas) se intersectan a la vez y hay al menos una variante compartida entre
+  las reglas comparadas.
 
 ### Estados, edición, permisos
 
 - **FR-015**: Los estados DEBEN ser `Borrador`, `Activa`, `Pausada`, `Finalizada`, con
   transiciones `Borrador → {Activa, Finalizada}`, `Activa → {Pausada, Finalizada}`,
-  `Pausada → {Activa, Finalizada}`, `Finalizada → {}` (terminal). Solo `Activa` habilita el
-  descuento.
-- **FR-016**: Al guardar (crear o duplicar-y-editar antes de activar), si el tipo es **precio de
-  paquete** y `value` ≥ (`minQuantity` × precio normal de la variante **más barata** del
-  conjunto), el sistema DEBE **bloquear** el guardado y explicar que la promoción no
-  representaría un descuento para al menos una combinación del conjunto.
-- **FR-017**: El sistema DEBE permitir **duplicar** una promoción. La copia nace en `Borrador`
-  con el mismo tipo, valor, cantidad mínima, conjunto de variantes y vigencia, y un nombre
-  distinto.
-- **FR-018**: En estado `Activa` o `Pausada`, DEBE ser editable únicamente: nombre, descripción,
-  fecha de fin, conjunto de días y ventana horaria. DEBEN estar bloqueados: tipo, valor,
-  cantidad mínima y conjunto de variantes. En `Borrador` todo es editable.
+  `Pausada → {Activa, Finalizada}`, `Finalizada → {}` (terminal). El estado es de la
+  **promoción**, no de cada regla individualmente. Solo `Activa` habilita el descuento de
+  **todas** sus reglas.
+- **FR-016**: Al guardar (crear o editar antes de activar), para cada regla de tipo **precio de
+  paquete**, si `value` ≥ (`minQuantity` × precio normal de la variante **más barata** del
+  conjunto de esa regla), el sistema DEBE **bloquear** el guardado de la promoción completa y
+  explicar cuál regla no representaría un descuento para al menos una combinación de su
+  conjunto.
+- **FR-017**: El sistema DEBE permitir **duplicar** una promoción completa. La copia nace en
+  `Borrador` con las mismas reglas (tipo, valor, cantidad mínima y conjunto de variantes de cada
+  una) y la misma vigencia, y un nombre distinto.
+- **FR-018**: En estado `Activa` o `Pausada`, DEBE ser editable únicamente en la **promoción**:
+  nombre, descripción, fecha de fin, conjunto de días y ventana horaria. DEBEN estar
+  bloqueados: agregar, quitar o editar reglas (tipo, valor, cantidad mínima o conjunto de
+  variantes de cualquiera de sus reglas). En `Borrador` todo es editable, incluido agregar,
+  quitar y editar reglas.
 - **FR-019**: Solo el **administrador del tenant** DEBE poder crear, editar, duplicar, cambiar
-  de estado o eliminar una promoción. El cajero DEBE poder **visualizar** en la terminal, en
-  tiempo real, qué descuento puede aplicar cada producto, sin poder modificarlo.
+  de estado o eliminar una promoción (y sus reglas). El cajero DEBE poder **visualizar** en la
+  terminal, en tiempo real, qué descuento puede aplicar cada producto, sin poder modificarlo.
 - **FR-020**: El descuento NUNCA DEBE persistirse como un valor congelado que sobreviva a un
   cambio de estado de la promoción: cada cálculo de cobro DEBE partir del estado actual del
-  pedido y de las promociones vigentes en ese momento. (La persistencia de FR-021 es un
-  **registro del resultado ya cobrado**, no una congelación previa.)
+  pedido y de las reglas de promociones vigentes en ese momento. (La persistencia de FR-021 es
+  un **registro del resultado ya cobrado**, no una congelación previa.)
 
 ### Persistencia del resultado y superficies de consumo
 
 - **FR-021**: Al emitir una venta, el sistema DEBE registrar el **monto de descuento agregado**
-  efectivamente aplicado, más la **lista de promociones** que lo generaron, en `Sale`, en la
-  factura (`SaleInvoice`) y en `CustomerOrder`, de forma que el arqueo de caja y la consulta de
-  una venta pasada muestren el mismo descuento que se cobró y de qué promoción(es) vino. Esto
-  resuelve la anomalía A-29 (hoy, con más de una promoción o combo, no queda registrada
-  ninguna). El **desglose por línea de venta** (variante ↔ promoción ↔ monto) queda **fuera de
-  alcance** de este refactor. El registro NO es retroactivo: no altera ninguna venta ni factura
-  emitida antes del despliegue.
-- **FR-022**: El menú QR público DEBE mostrar, para cada promoción vigente en ese momento según
-  su ventana de día y hora (zona horaria del tenant), un anuncio con su condición legible (p.
-  ej. "Llevando 2 de estos sabores pagas $12.000"), sin que el cliente agregue nada al carrito.
-  Cuando el carrito alcanza `minQuantity` unidades elegibles, el precio efectivo con descuento
-  DEBE reflejarse en el carrito. Fuera de la ventana, el anuncio NO se muestra.
+  efectivamente aplicado, más la **lista de reglas** (identificando también la promoción a la
+  que pertenece cada una) que lo generaron, en `Sale`, en la factura (`SaleInvoice`) y en
+  `CustomerOrder`, de forma que el arqueo de caja y la consulta de una venta pasada muestren el
+  mismo descuento que se cobró y de qué regla(s)/promoción(es) vino. Esto resuelve la anomalía
+  A-29 (hoy, con más de una promoción o combo, no queda registrada ninguna). El **desglose por
+  línea de venta** (variante ↔ regla ↔ monto) queda **fuera de alcance** de este refactor. El
+  registro NO es retroactivo: no altera ninguna venta ni factura emitida antes del despliegue.
+- **FR-022**: El menú QR público DEBE mostrar, para cada **regla** cuya promoción esté vigente
+  en ese momento según su ventana de día y hora (zona horaria del tenant), un anuncio con su
+  condición legible (p. ej. "Llevando 2 de estos sabores pagas $12.000"), sin que el cliente
+  agregue nada al carrito. Cuando el carrito alcanza `minQuantity` unidades elegibles del
+  conjunto de esa regla, el precio efectivo con descuento DEBE reflejarse en el carrito. Fuera
+  de la ventana de su promoción, el anuncio de esa regla NO se muestra.
 - **FR-023**: La terminal de staff DEBE mostrar, para un producto/variante del conjunto de una
-  promoción vigente, **siempre** su condición en lenguaje llano ("Llevando 2 pagas $12.000"),
-  aunque el pedido en curso todavía no alcance `minQuantity` unidades elegibles. Cuando el
-  pedido en curso **sí** alcanza `minQuantity` unidades elegibles, la terminal DEBE mostrar
-  además el **descuento efectivo**, calculado con el mismo criterio que usa el cobro (mismo
-  comportamiento que el menú QR, FR-022). La terminal NO DEBE aplicar el descuento por su
-  cuenta: el cálculo vinculante es el del cobro.
+  **regla** cuya promoción esté vigente, **siempre** su condición en lenguaje llano ("Llevando 2
+  pagas $12.000"), aunque el pedido en curso todavía no alcance `minQuantity` unidades
+  elegibles. Cuando el pedido en curso **sí** alcanza `minQuantity` unidades elegibles de esa
+  regla, la terminal DEBE mostrar además el **descuento efectivo**, calculado con el mismo
+  criterio que usa el cobro (mismo comportamiento que el menú QR, FR-022). La terminal NO DEBE
+  aplicar el descuento por su cuenta: el cálculo vinculante es el del cobro.
 
 ### Migración de lo existente
 
@@ -572,11 +654,18 @@ verificar el estado y la forma de cada una después.
   automático a "N unidades cualesquiera del conjunto" cambiaría el precio en silencio. El
   administrador DEBE ver un aviso con la lista de promociones que quedaron finalizadas para
   recrearlas si siguen vigentes.
-- **FR-026**: Cada promoción `percent` existente DEBE migrarse conservando su tipo (porcentaje),
-  su valor, su vigencia y su estado, con el conjunto = todas las variantes activas alcanzadas
-  por sus `targets` al momento de migrar (foto fija). Una `percent` global (sin `targets`) DEBE
-  migrarse con el conjunto = todas las variantes activas del tenant al momento de migrar. Las
-  promociones `fixed` NO se migran automáticamente: pasan a `Finalizada` (FR-025).
+- **FR-026**: La migración hacia el modelo `Promoción`/`Regla` ocurre en dos pasos ya
+  distinguibles. **(1)** Cada `percent` con `targets` de producto/categoría, o `percent` global
+  (sin `targets`), ya fue materializada por la migración previa como una promoción con su
+  conjunto de variantes resuelto en `promotion_variants` (foto fija de las variantes activas
+  alcanzadas por sus `targets`, o de todas las variantes activas del tenant si era global) — ese
+  paso no se repite aquí. **(2)** Cada promoción existente (incluida una ya `Finalizada`) DEBE
+  migrarse a una `Promoción` con **una sola `Regla`** que conserva el `type`/`value`/`min_qty`
+  que la promoción tenía, y cuyo conjunto de variantes es el que la promoción ya tenía resuelto
+  en `promotion_variants` — sin volver a leer `targets` ni ningún otro filtro de alcance, porque
+  `targets` ya no existe en este punto de la migración. La promoción resultante conserva su
+  vigencia y su estado. Las promociones `fixed` NO se migran a otra forma en ningún paso: pasan a
+  `Finalizada` (FR-025).
 - **FR-027**: El modelo de **presentaciones** (entidad de catálogo, su módulo de administración,
   el selector en el formulario de producto y la referencia desde la variante) DEBE eliminarse
   por completo en backend y frontend. Ninguna funcionalidad DEBE depender de él tras el refactor.
@@ -585,21 +674,28 @@ verificar el estado y la forma de cada una después.
 
 ### Key Entities
 
-- **Promoción**: nombre, descripción opcional, tipo (porcentaje | precio de paquete), valor,
-  cantidad mínima, fecha de inicio, fecha de fin opcional, conjunto de días de la semana
-  opcional, ventana horaria opcional (con cruce de medianoche), estado
-  (`Borrador`/`Activa`/`Pausada`/`Finalizada`). Ya **no** tiene prioridad, ni alcance por
-  producto/categoría, ni componentes de combo, ni reglas de presentación.
-- **Pertenencia al conjunto**: relación entre una promoción y una variante de producto. No lleva
-  ningún atributo de precio. Una promoción tiene N; una variante puede pertenecer a varias
-  promociones siempre que sus ventanas no se intersecten (FR-014).
+- **Promoción**: nombre, descripción opcional, fecha de inicio, fecha de fin opcional, conjunto
+  de días de la semana opcional, ventana horaria opcional (con cruce de medianoche), estado
+  (`Borrador`/`Activa`/`Pausada`/`Finalizada`). Agrupa **una o más `Regla`**, que comparten su
+  vigencia y su estado. Ya **no** tiene prioridad, tipo, valor ni cantidad mínima propios (viven
+  en sus reglas), ni alcance por producto/categoría, ni componentes de combo, ni reglas de
+  presentación.
+- **Regla**: pertenece a exactamente una `Promoción`. Tiene tipo (porcentaje | precio de
+  paquete), valor, cantidad mínima y un conjunto de variantes de producto. Es la unidad que el
+  motor de cobro evalúa para formar grupos y calcular descuento (FR-006–FR-009). Dentro de una
+  misma promoción, los conjuntos de variantes de sus reglas son disjuntos entre sí (FR-001a).
+- **Pertenencia al conjunto**: relación entre una **regla** y una variante de producto. No lleva
+  ningún atributo de precio. Una regla tiene N; una variante puede pertenecer a varias reglas de
+  promociones distintas siempre que sus ventanas no se intersecten, y a lo sumo una regla por
+  promoción (FR-014, FR-001a).
 - **Variante de producto**: unidad vendible con su precio. Su estado activo/inactivo determina
   si cuenta para formar grupos completos. Ya **no** referencia ninguna presentación de catálogo.
-- **Grupo completo (paquete)**: agrupación de `minQuantity` unidades elegibles del conjunto,
-  formada al momento de cobrar por consumo codicioso descendente de precio. Solo los grupos
-  completos generan descuento.
+- **Grupo completo (paquete)**: agrupación de `minQuantity` unidades elegibles del conjunto de
+  una regla, formada al momento de cobrar por consumo codicioso descendente de precio. Solo los
+  grupos completos generan descuento.
 - **Registro de descuento en la venta**: el monto de descuento efectivamente aplicado, guardado
-  en `Sale`, `SaleInvoice` y `CustomerOrder` al emitir (FR-021).
+  en `Sale`, `SaleInvoice` y `CustomerOrder` al emitir, junto con la lista de reglas (y su
+  promoción) que lo generaron (FR-021).
 
 ---
 
@@ -608,13 +704,14 @@ verificar el estado y la forma de cada una después.
 ### Measurable Outcomes
 
 - **SC-001**: El 100% de los pedidos que reúnen `minQuantity` unidades de variantes del conjunto
-  de una promoción vigente reciben el descuento correspondiente, sin importar de qué producto
-  sean las unidades ni el orden de las líneas.
-- **SC-002**: El 100% de los intentos de guardar una promoción de precio de paquete cuyo peor
-  caso no representa un descuento son rechazados con una explicación clara.
-- **SC-003**: El 100% de los intentos de crear o activar una promoción que se solaparía en el
-  tiempo con otra sobre una variante compartida son rechazados nombrando el conflicto; el 100%
-  de los que no se solapan en el tiempo se permiten.
+  de una regla cuya promoción está vigente reciben el descuento correspondiente, sin importar de
+  qué producto sean las unidades ni el orden de las líneas.
+- **SC-002**: El 100% de los intentos de guardar una promoción con alguna regla de precio de
+  paquete cuyo peor caso no representa un descuento son rechazados con una explicación clara de
+  qué regla falla.
+- **SC-003**: El 100% de los intentos de crear o activar una regla que se solaparía en el tiempo
+  con otra (de la misma promoción o de otra) sobre una variante compartida son rechazados
+  nombrando el conflicto; el 100% de los que no se solapan en el tiempo se permiten.
 - **SC-004**: El 0% de los pedidos cobrados fuera del día o del horario configurado de una
   promoción reciben su descuento.
 - **SC-005**: En el 100% de los cobros con grupos completos, la suma de los descuentos por línea
@@ -622,11 +719,15 @@ verificar el estado y la forma de cada una después.
 - **SC-006**: El 100% de las promociones existentes en producción al desplegar el refactor
   quedan, tras la migración, en un estado explícito (migrada y activa/pausada, o finalizada con
   aviso), y ninguna `Sale` ni factura previa cambia de importe.
-- **SC-007**: Un cliente del menú QR puede identificar la condición de una promoción vigente sin
-  agregar nada al carrito, y no ve anunciadas las promociones fuera de su ventana de día u hora.
-- **SC-008**: Un administrador puede crear la promoción "2X Pequeños con licor $12.000" sobre
-  las ocho variantes Pequeño con licor y verificar, cobrando 1 Ojo de Diablo Pequeño + 1 Perla
-  Negra Pequeño, un total de exactamente $12.000, sin leer código.
+- **SC-007**: Un cliente del menú QR puede identificar, sin agregar nada al carrito, las
+  condiciones de todas las reglas vigentes de una promoción en ese momento, y no ve anunciadas
+  las reglas cuya promoción está fuera de su ventana de día u hora.
+- **SC-008**: Un administrador puede crear la promoción "2X entre semana" con sus seis reglas
+  (Pequeños $12.000, Medianos $17.000, Grandes $22.000, Extra grandes $27.000, Baldes $31.000,
+  Litros $41.000) en una sola sesión del formulario, activarla, y verificar, cobrando 1 Ojo de
+  Diablo Pequeño + 1 Perla Negra Pequeño (regla Pequeños), un total de exactamente $12.000 — sin
+  que las otras cinco reglas generen ningún conflicto ni requieran ninguna acción adicional —
+  sin leer código.
 
 ---
 
@@ -660,18 +761,29 @@ negocio, fase de plan):
 6. **Se elimina la entidad `Presentation`** y todo lo que depende de ella (spec 040 revertida en
    su parte de modelo de datos; el resto de spec 040 —vigencia por día/hora, cruce de
    medianoche, anuncio en menú QR— se conserva) (FR-027).
-7. **Se persiste el descuento agregado + la lista de promociones que lo generaron** en `Sale`,
-   `SaleInvoice` y `CustomerOrder` (hoy solo el agregado en `Sale.discount` y un único
-   `promotion_id` que queda `NULL` con más de una promoción; `CustomerOrder` no tiene campo de
-   descuento) (FR-021). Resuelve A-29. El desglose por línea de venta queda fuera de alcance.
+7. **Se persiste el descuento agregado + la lista de reglas (con su promoción) que lo
+   generaron** en `Sale`, `SaleInvoice` y `CustomerOrder` (hoy solo el agregado en
+   `Sale.discount` y un único `promotion_id` que queda `NULL` con más de una promoción;
+   `CustomerOrder` no tiene campo de descuento) (FR-021). Resuelve A-29. El desglose por línea
+   de venta queda fuera de alcance.
 8. **La regla "dentro de una misma presentación el precio unitario es siempre el mismo" se
    deroga** — es falsa en el catálogo real (un Pequeño con licor cuesta $8.000 y uno sin licor
    $6.000). No DEBE usarse como invariante en ninguna validación (ver Assumptions).
+9. **Se introduce `Regla` como entidad hija de `Promoción`** (decisión de la sesión de
+   clarificación 2026-09-01, no presente en el diagrama ni en la solicitud original): la
+   promoción pasa a ser solo vigencia + estado, y agrupa una o más reglas, cada una con su
+   propio tipo/valor/cantidad mínima/conjunto de variantes (FR-001, FR-001a). No es un cambio
+   respecto de producción (producción no tenía esta noción en absoluto), pero sí una revisión
+   del propio diseño de este refactor: reemplaza la decisión original de la sesión 2026-08-31
+   (Q1) de que "una promoción es exactamente una combinación". El motivo es operativo: permite
+   crear y mantener (pausar, extender vigencia) varias reglas "hermanas" que comparten vigencia
+   —como los seis tramos de precio "2X" de Springfield— con una sola promoción y una sola
+   acción, en vez de repetir el ciclo completo de creación/edición por cada una.
 
 ### Tests `"CONGELA comportamiento actual:"` afectados
 
 Todos requieren reescritura; la justificación es el cambio de modelo aprobado en esta spec. El
-**comportamiento congelado que sigue vigente** (una sola promoción por línea, descuento tope al
+**comportamiento congelado que sigue vigente** (una sola regla por línea, descuento tope al
 precio normal, remanente a precio normal, vigencia en hora local, cruce de medianoche) se
 **re-congela** con casos equivalentes en el nuevo modelo.
 
@@ -682,7 +794,7 @@ precio normal, remanente a precio normal, vigencia en hora local, cruce de media
 | `test_serialize_cart_discounted_total_con_promocion_activa` | `test_cart_service.py` | Usa alcance por **categoría**; se reescribe con conjunto de variantes (FR-003). |
 | `test_serialize_cart_discounted_total_sin_promocion` | `test_cart_service.py` | Se conserva el invariante (`discounted_total` = `None` sin promo); se revisa el montaje. |
 | `test_add_item_to_table_combo_expande_componentes_a_precio_normal` | `test_orders_consolidation.py` | Se elimina la expansión de combo (FR-024). |
-| `test_close_session_unified_a29_promotion_id_no_registra_combos_multiples` | `test_table_sessions_service.py` | A-29: cambia con la persistencia del agregado + lista de promociones (FR-021) y sin combos. |
+| `test_close_session_unified_a29_promotion_id_no_registra_combos_multiples` | `test_table_sessions_service.py` | A-29: cambia con la persistencia del agregado + lista de reglas (FR-021) y sin combos. |
 | `test_promo_lines_for_camino_feliz_y_sin_promocion_aplicable` | `test_orders_checkout.py` | El motor cambia de `evaluate` a un cálculo por conjunto; se re-congela el resultado. |
 | `test_pay_order_construye_sale_real_con_promocion_activa` | `test_orders_checkout.py` | Ídem; el `Sale` ahora registra el descuento agregado + promociones (FR-021). |
 | `test_pay_order_dos_combos_distintos_a29_promotion_id_none` | `test_orders_checkout.py` | Se elimina combo; A-29 se resuelve por otra vía (FR-021). |
@@ -704,12 +816,22 @@ tests, con su nombre y archivo, se completa en `/speckit-plan`.
 - El tipo "compra X y lleva Y" (`buy_x_get_y`).
 - Cupones o códigos promocionales.
 - Promociones por cliente o por segmento.
-- Acumulación de varias promociones sobre una misma línea (sigue habiendo **una** por línea).
+- Acumulación de varias reglas sobre una misma línea (sigue habiendo **una regla** por línea;
+  FR-014 lo garantiza también dentro de una misma promoción, FR-001a).
 - Descuento manual del cajero (ya rechazado por spec 029; sin cambios).
 - Un reporte nuevo de analítica de ventas por promoción (solo se documenta el efecto; ver G3).
 - Recalcular retroactivamente ventas o facturas ya emitidas.
 - El detalle de columnas, tablas y migraciones concretas (corresponde a `/speckit-plan`,
   Principio VIII).
+- Un límite de cantidad de **reglas** por plan de suscripción (básico/estándar/avanzado). Si se
+  necesita, es una extensión de la spec 033 (Planes de Suscripción por Tenant) sobre un nuevo
+  recurso numérico "reglas de promoción activas", con el mismo mecanismo ya usado para mesas,
+  cajas, usuarios, productos y métodos de pago activos (spec 033, User Story 3). El recurso
+  contado DEBE ser la **regla**, no la promoción: como una promoción agrupa N reglas que
+  comparten vigencia (FR-001), contar promociones dejaría sin efecto el límite (un tenant
+  básico podría empaquetar todas sus reglas bajo una sola promoción). El límite, si se
+  implementa, se valida solo al crear/activar una regla y no afecta el motor de cobro ni la
+  persistencia en `Sale`/`SaleInvoice` (Clarifications, sesión 2026-09-01).
 
 ---
 
@@ -735,12 +857,14 @@ tests, con su nombre y archivo, se completa en `/speckit-plan`.
   de comportamiento"). Ninguna validación debe asumir que dos variantes del mismo tamaño cuestan
   lo mismo.
 
-- **Los seis "2X" son seis promociones separadas**, una por presentación, todas con
-  `daysOfWeek = {lunes, martes, miércoles, jueves}`, tipo precio de paquete, `minQuantity` 2, y
-  conjunto = las variantes **con licor** de esa presentación. No se solapan entre sí porque sus
-  conjuntos son disjuntos. Si el conjunto incluyera variantes **sin licor**, FR-016 bloquearía
-  el guardado en Medianos, Extra grandes, Baldes y Litros (2 sin licor cuestan menos que el
-  precio 2X).
+- **Los seis "2X" son seis reglas**, una por presentación, todas de tipo precio de paquete,
+  `minQuantity` 2, con conjunto = las variantes **con licor** de esa presentación. No se
+  solapan entre sí porque sus conjuntos son disjuntos (cumplen FR-001a). Como las seis comparten
+  vigencia (`daysOfWeek = {lunes, martes, miércoles, jueves}`), se modelan como **una sola
+  `Promoción`** con esas seis reglas (FR-001) — el caso de referencia para la creación por lote
+  y para pausar/editar vigencia de las seis de una sola vez. Si el conjunto de alguna regla
+  incluyera variantes **sin licor**, FR-016 bloquearía el guardado en Medianos, Extra grandes,
+  Baldes y Litros (2 sin licor cuestan menos que el precio 2X).
 
 ### Ejemplos numéricos que cuadran exacto (COP)
 
@@ -801,10 +925,10 @@ tests, con su nombre y archivo, se completa en `/speckit-plan`.
 ### Otras asunciones
 
 - **Persistencia (FR-021)**: el registro en `Sale` / `SaleInvoice` / `CustomerOrder` es el
-  **monto de descuento agregado** más la lista de promociones que lo generaron. El desglose por
-  línea de venta (variante ↔ promoción ↔ monto) NO se construye en este refactor; si se
+  **monto de descuento agregado** más la lista de reglas (con su promoción) que lo generaron. El
+  desglose por línea de venta (variante ↔ regla ↔ monto) NO se construye en este refactor; si se
   necesita para auditoría o analítica, es una spec aparte. La forma concreta de guardar "lista
-  de promociones" (columna nueva, tabla puente) es decisión de `/speckit-plan`.
+  de reglas" (columna nueva, tabla puente) es decisión de `/speckit-plan`.
 - **Menú QR**: se reutiliza el mecanismo de anuncio introducido por la spec 040 (FR-021 de esa
   spec), adaptado a "conjunto de variantes" en vez de "presentación".
 - **La terminal de staff** sigue teniendo una réplica del criterio de elegibilidad y de cálculo
@@ -823,3 +947,18 @@ tests, con su nombre y archivo, se completa en `/speckit-plan`.
   paquete ni un porcentaje.
 - **Persistencia**: monto agregado + lista de promociones, en `Sale` / `SaleInvoice` /
   `CustomerOrder`; el desglose por línea de venta queda para una spec futura.
+
+### Decisiones tomadas en la sesión de clarificación (2026-09-01)
+
+- **Modelo `Promoción` + `Regla`**: reemplaza la decisión anterior ("una promoción es
+  exactamente una combinación"). La promoción pasa a tener solo vigencia y estado, y agrupa una
+  o más reglas; cada regla conserva exactamente lo que antes tenía la promoción (tipo, valor,
+  cantidad mínima, conjunto de variantes). Ver FR-001, FR-001a y Clarifications, sesión
+  2026-09-01.
+- **Reglas de la misma promoción no comparten variante**: se bloquea al guardar/activar
+  (FR-001a, FR-014).
+- **Límite por plan de suscripción**: fuera de alcance de esta spec; si se implementa (extensión
+  de spec 033), el recurso contado DEBE ser la regla, no la promoción, o el límite queda sin
+  efecto (Out of Scope).
+- **Persistencia**: monto agregado + lista de **reglas** (con su promoción), en `Sale` /
+  `SaleInvoice` / `CustomerOrder`.
