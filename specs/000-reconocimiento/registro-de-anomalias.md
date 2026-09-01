@@ -914,6 +914,26 @@ vender una variante con esta configuración incompleta.
 existen casos así, unificar el criterio en fase de modernización (sin retroactividad, es
 lógica de validación, no dato almacenado).
 
+**Resolución (2026-09-01, spec 064 — Deimer Hernandez)**: `A-32` pasa de `PENDIENTE` a
+**RESUELTA**. `grupos_que_descuentan` (`app/catalog_engine/pricing.py`) se modificó para exigir
+exactamente las mismas tres condiciones que `group_discounts`
+(`app/catalog_engine/consumption.py`): `active=True`, `inventory_item_id` no nulo, y
+`item_quantity>0` — no solo `item_quantity>0` como antes. Se unificó hacia el criterio de
+`group_discounts` (el más estricto) porque ya era el tratado como canónico en otro lugar del
+propio código: la migración `e3f4a5b6c7d8_products_tracks_inventory.py` (spec 027) hardcodea
+exactamente ese criterio de tres condiciones en su SQL de backfill. **Qué cambia**: una opción
+con `item_quantity` puesto pero sin insumo enlazado (o inactiva) ya no fuerza "elige exactamente
+el máximo" en `validate_option_selection` — antes sí lo hacía, ahora coincide con que
+`ensure_lines_consume_inventory` tampoco la trata como fuente de consumo. **Por qué**: eliminar
+el mensaje de error equivocado ("no tiene receta configurada" cuando el problema real es un
+insumo sin enlazar) que motivó originalmente esta anomalía. **Funcionalidades afectadas**:
+`validate_option_selection`/`load_valid_options` (spec 004, `RN-CAT-28`/`RN-CAT-39`); sin
+cambio en `ensure_lines_consume_inventory` ni en el cálculo de consumo real (spec 003). Tests
+actualizados: `app/characterization_tests/test_catalog_consumption_plan.py::GroupDiscountsCriteriaTests`
+(antes congelaba la discrepancia; ahora congela que ambos criterios siempre coinciden, con un
+caso nuevo para la combinación "insumo ligado pero inactivo"). Detalle completo en
+`specs/064-grupos-opciones-precio-inventario/research.md`, Decisión 3.
+
 ### A-33 — Un grupo opcional que descuenta inventario bloquea la venta si nadie elige nada, pese a que el propio código llama a eso "una decisión legítima"
 **Descripción**: `validate_option_selection` permite explícitamente no elegir nada de un grupo
 opcional (`min_select=0`); pero si ese grupo opcional es la única fuente de consumo,
@@ -1890,7 +1910,7 @@ consignada aquí para que no se pierda al no tener una entrada `A-NN` propia.
 | A-29 | ~~PENDIENTE~~ **RESUELTA** (spec 063, ver A-64) | Persistir `applied_promotions` (agregado + lista) en `sales`/`invoices`/`customer_orders`; tipo `combo` eliminado | Ninguna |
 | A-30 | ACCIDENTAL / PENDIENTE | Corregir + documentar | Manejo genérico de `IntegrityError` |
 | A-31 | ACCIDENTAL | Corregir en modernización (solo volumen) | Cerrada (ronda 3, simulada): sin necesidad de masa↔volumen |
-| A-32 | PENDIENTE | Documentar sin especificar | Consulta a catálogo real (datos) |
+| A-32 | **RESUELTA (2026-09-01, spec 064)** | Unificado hacia el criterio de `group_discounts` | Ninguna — resuelta sin necesitar la consulta a datos original |
 | A-33 | PENDIENTE | Documentar sin especificar | Intención de "grupo opcional" |
 | A-34 | PENDIENTE | Documentar sin especificar | Comportamiento de rollback en `db.py` |
 | A-35 | ACCIDENTAL / PENDIENTE | Corregir 500 ya; documentar resto | `allow_negative`, motivo, costo promedio |
