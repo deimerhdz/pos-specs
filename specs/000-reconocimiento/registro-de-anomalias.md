@@ -1858,6 +1858,104 @@ uniformidad.
 **Tratamiento acordado**: incrementos B/E de `specs/063-promociones-por-variante/tasks.md`.
 Coincide con la eliminación de `Presentation` (A-63). No retroactivo.
 
+### A-66 — [DECISIÓN DE NEGOCIO — spec 066] El texto de condición de una regla describe el conjunto por nombres de variante, no por conteo
+
+**Qué cambia**: `variant_set_condition_text` pasa de describir el conjunto de una regla por
+**conteo** (`"Llevando 2 de estas 8 variantes pagas $12.000"`) a describirlo por **nombres de
+variante** (`"Llevando 2 entre Grande 16oz, Mediano 12oz y Pequeño 8oz pagas $12.000"`). El
+descriptor deduplica por el nombre mostrado, ordena alfabéticamente ignorando tildes y mayúsculas,
+y resume a tres nombres más `y {N} más` cuando hay más de tres. El nombre utilizable es el de la
+variante y, si está vacío, el del producto. El texto por conteo **se conserva como respaldo**, pero
+solo cuando ninguna variante del conjunto tiene nombre utilizable (FR-006). Alcanza las tres
+superficies que ya consumen `condition_text`: el cartel del menú QR, el listado y el formulario de
+administración, y la terminal del cajero. La vista previa del formulario replica el algoritmo en
+TypeScript porque describe variantes todavía no guardadas (FR-018).
+**Por qué cambia**: el texto por conteo no le dice al comensal **qué debe llevar** para que la
+promoción aplique, que es justo lo que el cartel existe para comunicar. En el catálogo real del
+tenant (Springfield Granizados), donde los conjuntos son de una variante por tramo de tamaño, el
+formato produce además `"de estas 1 variantes"` — literalmente absurdo para quien lo lee.
+**Quién tomó la decisión y cuándo**: propietario del repositorio, 2026-09-01, en
+`specs/066-promociones-legibles-menu/spec.md` §"Cambios de comportamiento respecto de producción",
+punto 1, y FR-001 a FR-006.
+**Funcionalidades afectadas**: `variant_set_condition_text` (`promotions/service.py`), cuya firma
+gana un parámetro `names` **obligatorio**, y sus dos call sites (`_serialize_rule` y
+`_build_menu_promotions`). **Cinco tests de aceptación de la spec 063**, ninguno con el prefijo bajo
+veto `"CONGELA comportamiento actual:"` (verificado el 2026-09-01), que DEBEN actualizarse citando
+la spec 066 (Principio III): `test_menu_router.py::test_vigente_se_anuncia_con_texto_legible`,
+`test_promotions_rules_admin.py::test_ca1_ca6_paquete_nace_borrador_con_condicion`,
+`test_promotions_router.py::test_el_header_no_cambia_la_forma_de_la_respuesta` (línea 75, hallado
+por el reconocimiento del plan y no listado en la primera redacción de la spec),
+`app/scripts/test_promotions_rules.py` (`_regla_texto`) y
+`promotions-page.component.spec.ts`. **Refina sin derogar** la spec 063: los ejemplos de texto de
+sus FR-022 y FR-023 quedan sustituidos por el formato de FR-004; el resto de ambos requisitos
+—cuándo se anuncia, qué evalúa la vigencia, que la terminal no aplica descuento— sigue vigente.
+**Clasificación**: DECISIÓN DE NEGOCIO — cambia un texto visible introducido por la spec 063.
+**Tratamiento acordado**: fases 2 (Foundational) y 3 (US1) de
+`specs/066-promociones-legibles-menu/tasks.md`. No retroactivo: el texto se calcula al momento de
+mostrar con los nombres vigentes del catálogo y no se persiste; ninguna venta, factura ni pedido ya
+emitido cambia de representación.
+
+### A-67 — [DECISIÓN DE NEGOCIO — spec 066] La insignia del menú QR pasa a ser genérica y cada presentación cubierta gana una línea informativa
+
+**Qué cambia**: dos señales nuevas en el menú QR. **(a)** La insignia de la tarjeta pasa de ser
+**por tipo de descuento** (`🏷️ -10%` / `🏷️ -$2.000`, derivada de que exista precio unitario con
+descuento) a una **insignia genérica** (`🎉 Promo`), igual para porcentaje y para paquete, que
+cubre también las promociones de paquete y las de porcentaje con cantidad mínima > 1 —hoy
+invisibles en la carta—. **(b)** Cada presentación cubierta por una regla vigente gana una **línea
+informativa** con su condición corta y su equivalente por unidad (`2 x $12.000 · $6.000 c/u`),
+marcado con `≈` siempre que el importe exacto no sea entero en pesos. Incluye las de cantidad
+mínima 1, que hoy solo muestran precio tachado. **La insignia de la terminal NO cambia** (FR-016),
+y en la tarjeta se conservan el precio tachado y el `Desde $X` tal como están hoy (FR-015).
+**Por qué cambia**: hoy una promoción de paquete no produce **ninguna** señal en la carta, así que
+el comensal no tiene forma de saber que existe sin abrir el producto; y una presentación que sí
+muestra descuento no dice **de qué promoción viene** ni qué hay que llevar para obtenerla. La
+insignia por tipo, además, solo sabe expresar los descuentos que ya tienen precio unitario
+rebajado, que es un subconjunto de las promociones vigentes.
+**Quién tomó la decisión y cuándo**: propietario del repositorio, 2026-09-01, en
+`specs/066-promociones-legibles-menu/spec.md` §"Cambios de comportamiento respecto de producción",
+punto 2, y FR-007 a FR-009, FR-013 y FR-014.
+**Funcionalidades afectadas**: `public-menu.component.ts` (el bloque de insignia por tipo se
+reemplaza; `productDiscount()` y `priceLabel()` se conservan intactos por FR-015),
+`product-select.component.ts` (**compartido** por el menú del comensal y las dos superficies del
+cajero: un solo cambio, sin ramas por superficie) y `MenuVariantResponse`, que gana un bloque
+**aditivo** `promotion` con la condición ya calculada por el backend. Ningún test heredado afirma
+la insignia por tipo ni la línea informativa: `public-menu.component.spec.ts` gana casos nuevos y
+`product-select.component.ts` no tenía spec.
+**Clasificación**: DECISIÓN DE NEGOCIO — cambia la señalización visible del menú QR.
+**Tratamiento acordado**: fases 4 (US2) y 5 (US3) de
+`specs/066-promociones-legibles-menu/tasks.md`. No retroactivo: toda la información de promoción
+por presentación es derivada, se calcula al responder y se descarta.
+
+### A-68 — [DECISIÓN DE NEGOCIO — spec 066] Una regla de precio de paquete con cantidad mínima 1 se muestra como precio unitario vigente
+
+**Qué cambia**: `menu_unit_discount` se extiende a las reglas de tipo `package_price` con
+`min_qty == 1`, devolviendo **`rule.value` tal cual** como precio unitario con descuento, y
+`discount_kind` pasa a llevar el tipo **real** de la regla (`percent` o `package_price`) en lugar de
+un valor fijo. Alcanza el modal del producto, la tarjeta y el total del botón de agregar del menú
+QR. Las reglas de `percent` con `min_qty > 1` y las de `package_price` con `min_qty > 1` siguen sin
+producir precio vigente, como hoy. **Invariante que acompaña a la decisión**: para
+`package_price` con `min_qty 1` el valor de la regla es el precio vigente **siempre**, incluso si
+resulta mayor o igual que el precio de catálogo —no se recorta, no se descarta y no se sustituye
+por el precio normal—, porque es el importe que el cobro aplica; en ese caso el menú muestra ese
+precio sin tachado ni señal de descuento (FR-015).
+**Por qué cambia**: hoy el menú muestra el precio normal y el cobro aplica el de la regla, así que
+el comensal **ve un importe distinto del que se le cobra**. Es una corrección de importe visible,
+no una decisión de presentación: es el único defecto de importe de la spec 066.
+**Quién tomó la decisión y cuándo**: propietario del repositorio, 2026-09-01, en
+`specs/066-promociones-legibles-menu/spec.md` §"Cambios de comportamiento respecto de producción",
+punto 3, y FR-010 y FR-015; criterio de éxito SC-003.
+**Funcionalidades afectadas**: `menu_unit_discount` (`promotions/service.py`). **El motor de cobro
+no se toca**: `evaluate_variant_sets`, `_greedy_units`, `_distribute_group_discount`, el criterio de
+vigencia (A-57 intacto) y las guardas de solapamiento quedan como están (FR-019), de modo que el
+importe **cobrado** no cambia en ningún escenario (SC-006) — lo que cambia es el **mostrado**, que
+pasa a coincidir con él. En el frontend, la insignia de porcentaje se acota a
+`discount_kind === 'percent'` para que una regla de paquete no fabrique un `-25%` que nunca enuncia.
+**Clasificación**: DECISIÓN DE NEGOCIO — corrige una discrepancia **mostrado ≠ cobrado** en
+producción.
+**Tratamiento acordado**: fase 4 (US2) de `specs/066-promociones-legibles-menu/tasks.md`. **No
+retroactivo** (Principio VII): ninguna venta, factura ni pedido ya emitido se recalcula ni se
+re-serializa; el cambio solo afecta a lo que el menú muestra antes de cobrar.
+
 ---
 
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
