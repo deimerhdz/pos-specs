@@ -1956,6 +1956,45 @@ producción.
 retroactivo** (Principio VII): ninguna venta, factura ni pedido ya emitido se recalcula ni se
 re-serializa; el cambio solo afecta a lo que el menú muestra antes de cobrar.
 
+### A-69 — [DECISIÓN DE NEGOCIO — spec 071] Una promoción `Pausada` deja de bloquear agregar, quitar y editar el conjunto de variantes de sus reglas
+
+**Qué cambia**: la spec 063 (FR-018) bloqueaba agregar, quitar o editar cualquier regla —tipo,
+valor, cantidad mínima o conjunto de variantes— tanto en `Activa` como en `Pausada`; el único
+camino para tocar la forma de una promoción que ya salió de `Borrador` era duplicarla.
+`Pausada` deja de tratarse igual que `Activa`: mientras la promoción está `Pausada`, el
+administrador puede agregar una regla nueva, quitar una regla existente (conservando siempre al
+menos una) y agregar o quitar productos del conjunto de variantes de cualquiera de sus reglas —
+sin duplicar la promoción. Lo que **no** cambia: en `Activa` sigue todo bloqueado igual que hoy
+(FR-013); y el tipo, el valor y la cantidad mínima de una regla que ya existía al pausar siguen
+sin poder editarse **in situ** en `Pausada` — para eso hay que quitarla y agregar una nueva con
+la configuración deseada, o duplicar la promoción completa (FR-015). El backend solo relaja la
+condición de estado de `PATCH /promotions/{id}/shape` (`update_shape`, antes exclusivo de
+`draft`) para aceptar también `paused`; las validaciones de guardado (FR-014/FR-014a de solape,
+FR-001a de conjuntos disjuntos, FR-016 de precio de paquete que sí descuente, y el mínimo de una
+regla, ya exigido por el esquema `PromotionShapeUpdate.rules: min_length=1`) se aplican sin
+cambios.
+**Por qué cambia**: pausar una promoción para corregir un producto mal seleccionado, o para
+agregar/quitar una regla, es la operación de mantenimiento más común sobre una promoción que ya
+está en producción; obligar a duplicarla —perdiendo el vínculo con la original y teniendo que
+finalizarla a mano— es una fricción desproporcionada para un error operativo simple.
+**Quién tomó la decisión y cuándo**: propietario del repositorio, 2026-09-02, en
+`specs/071-mejoras-formulario-promociones/spec.md` §Clarifications (sesión 2026-09-02) y FR-013
+a FR-018.
+**Funcionalidades afectadas**: `service.update_shape` y el router
+`PATCH /promotions/{id}/shape` (`pos-backend`, mensaje de error y validación de estado); en
+`pos-heladeria`, `PromotionsPageComponent.canEditShape()` (pasa a permitir `draft` y `paused`) y
+`save()` (llama a `updateShape` también en `paused`). Ningún test con el prefijo bajo veto
+`"CONGELA comportamiento actual:"` cubre este bloqueo (verificado el 2026-09-02): el único test
+afectado, `test_promotions_rules_admin.py::test_ca2_cambiar_reglas_de_una_activa_bloquea`, prueba
+el caso `Activa`, que **no cambia** — sigue en rojo si `update_shape` deja de bloquearlo. Se
+agregan tests nuevos para el caso `Pausada` (permitido) citando esta spec.
+**Clasificación**: DECISIÓN DE NEGOCIO — relaja un bloqueo de edición introducido por la spec
+063.
+**Tratamiento acordado**: fases correspondientes de `specs/071-mejoras-formulario-promociones/tasks.md`.
+No retroactivo (Principio VII): no hay descuento persistido que recalcular — spec 063 FR-020 ya
+prohíbe cualquier "descuento congelado", así que reactivar tras editar en `Pausada` simplemente
+usa el conjunto vigente en el próximo cobro.
+
 ---
 
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
