@@ -375,3 +375,51 @@ Task: "Test de control fuera del módulo en test_error_middleware_scope.py (T011
   dependencias fijadas instalaron y corrieron sin fricción). Recomendado: repetir la suite
   también contra 3.12 antes de dar el spec por cerrado, y correr el resto de `quickstart.md`
   contra un entorno con Postgres/Redis reales (pasos 3 completo y 4).
+
+## Corrección posterior a T022 (misma sesión, contra el servidor real del usuario)
+
+Al usar el feature en vivo (`POST /api/v1/super-admin/tenants` contra Postgres/Redis reales), el
+usuario encontró un hueco no cubierto por T007/FR-008: `tenant_create()`
+(`../pos-backend/app/core/db.py::122-142`, código preexistente, no tocado por este spec) atrapa
+cualquier excepción inesperada de la creación de tenant y la relanza como
+`HTTPException(500, "Internal server error")` **antes** de que llegue a `RequestIdMiddleware`.
+Ese camino pasaba por `register_error_handlers`'s handler de `HTTPException` (envelope correcto,
+verificado en vivo contra el servidor real del usuario), pero **no** quedaba logueado con
+`request_id` ni reportado a Sentry — el reporte solo estaba cableado en el camino de excepción no
+envuelta de `RequestIdMiddleware`.
+
+**Corrección aplicada**: `register_error_handlers`'s handler de `HTTPException`
+(`app/core/error_middleware.py`) ahora también llama `_report_unexpected_exception` cuando
+`exc.status_code >= 500`, sin importar si la excepción llegó cruda o ya envuelta — un 500 sigue
+siendo una falla técnica en cualquiera de los dos casos. Sentry recibe la cadena completa
+(`HTTPException` + su causa original, por el encadenamiento implícito de Python), así que la
+excepción real que lo originó sigue siendo diagnosticable ahí aunque el mensaje que ve el cliente
+se mantenga genérico y seguro.
+
+Test nuevo: `test_httpexception_500_ya_envuelta_tambien_reporta_a_sentry` en
+`test_super_admin_sentry_integration.py`. Suite completa re-ejecutada tras el cambio: **611
+tests, 610 en verde** (mismo único fallo preexistente y no relacionado de
+`test_tenant_plan_assignment.py`, sección anterior). Verificado además en vivo contra el
+servidor real del usuario (`fastapi dev`, Postgres/Redis reales): el envelope de error se
+confirmó correcto antes y después de este cambio; el reporte a Sentry no se pudo confirmar en
+vivo porque ese entorno corre con `ENVIRONMENT=dev` (correctamente, no debe reportar ahí) — queda
+cubierto por el test nuevo contra un entorno simulado en `"prod"`.
+
+## Segunda corrección (mismo hilo): formato del log de terminal
+
+El usuario pidió, además, que la terminal muestre el **mismo contexto** que se envía a Sentry
+(`module`/`operation`/`request_id`/`user_id`), sin importar el entorno — antes
+`_report_unexpected_exception` solo incluía `operation`/`request_id` en el mensaje de log;
+`module` y `user_id` solo viajaban como tags/usuario de Sentry, invisibles en la terminal.
+
+**Corrección aplicada**: `_report_unexpected_exception` (`app/core/error_middleware.py`) calcula
+`user_id` una sola vez y lo usa tanto en el log (`logger.exception("Falla técnica inesperada |
+module=%s operation=%s request_id=%s user_id=%s", ...)`, incondicional — ya corría fuera del gate
+de `ENVIRONMENT`, así que ya se veía en dev) como en el `scope.set_user` de Sentry. El traceback
+completo se sigue adjuntando solo (`logger.exception` agrega `exc_info` después del mensaje).
+
+Test nuevo: `test_terminal_muestra_el_mismo_contexto_que_se_envia_a_sentry_en_cualquier_entorno`
+(usa `assertLogs` para verificar los cuatro campos en la línea de log). Suite completa
+re-ejecutada: **612 tests, 611 en verde** (mismo único fallo preexistente). Verificado en vivo
+contra el servidor real del usuario una vez más (`POST /api/v1/super-admin/tenants`, sigue en
+500 por la migración rota, sin relación con este spec).
