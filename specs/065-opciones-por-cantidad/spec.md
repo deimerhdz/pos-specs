@@ -1,6 +1,6 @@
 # Feature Specification: Selección por cantidad en grupos de opciones
 
-**Feature Branch**: `064-opciones-por-cantidad`
+**Feature Branch**: `065-opciones-por-cantidad`
 
 **Created**: 2026-09-01
 
@@ -12,7 +12,7 @@ cálculo de precio de línea ni el consumo por opción ya definidos en
 [spec 002](../002-catalogo-productos-variantes-y-precios/spec.md)/
 [spec 003](../003-consumo-de-inventario-por-receta-y-opcion/spec.md) para el modo de selección
 actual ("conteo") — los extiende con un segundo modo ("cantidad") que coexiste con el primero, sin
-cambiar su comportamiento por defecto. Tampoco reabre spec 004 (validación de forma) ni spec 064
+cambiar su comportamiento por defecto. Tampoco reabre spec 004 (validación de forma) ni spec 063
 (tipo de precio "incluido"/"con_recargo", switch de inventario condicional) — ambas siguen
 aplicando sin cambios sobre grupos en modo "conteo", y se extienden explícitamente para definir su
 interacción con el modo "cantidad" nuevo.
@@ -133,13 +133,13 @@ que el insumo de "Bobombún" se descuenta 2 veces su cantidad configurada y el d
    que defina el tamaño, según la regla ya vigente de "una sola cantidad manda, nunca se suman" —
    spec 003), y el de "Gomitas" una vez — cada topping sigue generando su propio movimiento de
    inventario, ahora multiplicado por su cantidad elegida.
-3. **Given** un grupo "Toppings" marcado como "Incluido" (spec 064) y además "Por cantidad", **When**
+3. **Given** un grupo "Toppings" marcado como "Incluido" (spec 063) y además "Por cantidad", **When**
    el comensal elige 2 unidades de una opción de ese grupo, **Then** el precio de línea no suma
    ningún recargo por esas 2 unidades — "Incluido" sigue bloqueando el precio en $0 sin importar la
    cantidad elegida; solo el consumo de inventario (si aplica) se multiplica por la cantidad.
-4. **Given** un grupo "Toppings" marcado "Con recargo" (spec 064) y "Por cantidad", **When** el
+4. **Given** un grupo "Toppings" marcado "Con recargo" (spec 063) y "Por cantidad", **When** el
    comensal elige cantidades de varias opciones, **Then** cada una cobra su propio recargo
-   multiplicado por su cantidad — los dos ejes (tipo de precio de spec 064, modo de selección de
+   multiplicado por su cantidad — los dos ejes (tipo de precio de spec 063, modo de selección de
    esta spec) son independientes entre sí y se combinan sin casos especiales.
 
 ---
@@ -271,9 +271,9 @@ usa produce el mismo precio y el mismo consumo que antes.
 - **FR-004**: El precio de una línea que incluye opciones de un grupo "Por cantidad" DEBE sumar el
   recargo de cada opción elegida multiplicado por su cantidad elegida (`extra_price × cantidad`),
   sobre el mismo cálculo base ya vigente (variante + recargos, spec 002, `RN-CAT-01`).
-- **FR-005**: Un grupo "Por cantidad" marcado como "Incluido" (spec 064) DEBE seguir bloqueando el
+- **FR-005**: Un grupo "Por cantidad" marcado como "Incluido" (spec 063) DEBE seguir bloqueando el
   precio de todas sus opciones en $0, sin importar la cantidad elegida de cada una — el tipo de
-  precio (spec 064) y el modo de selección (esta spec) son ejes independientes.
+  precio (spec 063) y el modo de selección (esta spec) son ejes independientes.
 - **FR-006**: Cuando el producto de una presentación maneja inventario (spec 027) y una de sus
   opciones "Por cantidad" tiene insumo ligado, el consumo de esa opción DEBE multiplicarse por la
   cantidad elegida del cliente, aplicada sobre la cantidad por unidad que ya resulte de la regla
@@ -311,12 +311,12 @@ usa produce el mismo precio y el mismo consumo que antes.
 ### Key Entities *(include if feature involves data)*
 
 - **OptionGroup**: grupo de opciones (spec 004), ya con un tipo de precio ("incluido"/"con_recargo",
-  spec 064). Gana un atributo nuevo: modo de selección ("conteo"/"cantidad"), y — solo cuando el
+  spec 063). Gana un atributo nuevo: modo de selección ("conteo"/"cantidad"), y — solo cuando el
   modo es "cantidad" — dos topes opcionales: máximo de unidades por opción individual y máximo de
   unidades totales del grupo. En modo "conteo", `min_select`/`max_select` siguen significando lo
   mismo de hoy (rango de opciones distintas); en modo "cantidad" esos dos campos no aplican.
 - **Option**: valor dentro de un grupo (sabor, topping). Sin cambio de atributos propios — su
-  `extra_price` (spec 064) y su enlace a insumo (spec 003) se interpretan igual, ahora multiplicados
+  `extra_price` (spec 063) y su enlace a insumo (spec 003) se interpretan igual, ahora multiplicados
   por la cantidad que el cliente elija de esa opción cuando su grupo está en modo "cantidad".
 - **Selección del cliente sobre un grupo**: en modo "conteo", sigue siendo una lista de opciones
   elegidas (spec 004). En modo "cantidad", pasa a ser una lista de pares (opción, cantidad elegida)
@@ -387,7 +387,7 @@ usa produce el mismo precio y el mismo consumo que antes.
   capa de venta y pago consume un precio de línea ya calculado y un detalle de opciones ya resuelto,
   sin recalcular nada por su cuenta — esta spec solo exige que ese detalle conserve la cantidad por
   opción (FR-011), sin cambiar cómo se registran ventas o pagos en sí.
-- **Las cuatro combinaciones de tipo de precio (spec 064) × modo de selección (esta spec) son todas
+- **Las cuatro combinaciones de tipo de precio (spec 063) × modo de selección (esta spec) son todas
   válidas y no requieren casos especiales**: "incluido"+"conteo" (el caso típico de sabores hoy),
   "con_recargo"+"conteo" (topping único con recargo, el caso típico de hoy), "incluido"+"cantidad"
   (extras gratuitos de los que se puede pedir más de una unidad, ej. "bombas de sirope") y

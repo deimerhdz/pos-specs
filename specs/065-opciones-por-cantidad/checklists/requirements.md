@@ -35,7 +35,7 @@
   "por cantidad" siempre opcional, nunca con mínimo) se resolvieron por adelantado con el usuario
   antes de escribir la spec (ver sección Clarifications), por lo que no quedó ningún marcador
   [NEEDS CLARIFICATION] pendiente.
-- Esta spec depende de specs 002, 003, 004 (modelo base de catálogo/opciones/inventario) y 064
+- Esta spec depende de specs 002, 003, 004 (modelo base de catálogo/opciones/inventario) y 063
   (tipo de precio "incluido"/"con_recargo", switch de inventario condicional) — revisarlas si
   alguna cambia antes de avanzar a `/speckit-plan`. También toca superficies de spec 007
   (carrito/menú QR) para mostrar cantidad por topping, sin reabrir su alcance general.
