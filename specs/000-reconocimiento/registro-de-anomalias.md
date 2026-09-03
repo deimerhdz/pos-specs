@@ -1995,6 +1995,69 @@ No retroactivo (Principio VII): no hay descuento persistido que recalcular — s
 prohíbe cualquier "descuento congelado", así que reactivar tras editar en `Pausada` simplemente
 usa el conjunto vigente en el próximo cobro.
 
+### A-70 — [DECISIÓN DE NEGOCIO — spec 073] La vigencia temporal de una promoción se evalúa contra el instante en que se tomó el pedido, no contra la hora del cobro
+
+**Qué cambia**: hasta hoy `auto_discount(db, lines, now)` recibe **siempre** `now` con la hora
+**del cobro** (`datetime.now(timezone.utc)` / `utc_now()`) en todos sus call sites, así que la
+vigencia **temporal** de una promoción —rango de fechas, día de la semana y franja horaria— se
+comprueba contra el momento en que se paga. A partir de la spec 073 esa vigencia temporal se
+evalúa contra el **instante en que se creó el pedido**, congelado una sola vez en la columna nueva
+`customer_orders.promotion_evaluated_at` (`DateTime(timezone=True)`, nulable, sin backfill). Un
+único helper puro `promotion_evaluation_instant(orders, *, now)` decide, en cada punto donde hoy se
+calcula la hora del cobro, si usa ese instante congelado o cae a `now` (pedidos anteriores a esta
+spec, columna `NULL` → comportamiento actual sin cambios, FR-012). Cuando una cuenta reúne varias
+rondas de una misma mesa que se cobran juntas, manda el instante del **pedido más antiguo
+pendiente de cobro** (FR-012a); en mesas fusionadas, que se cobran pedido a pedido, cada pedido va
+contra **su propio** instante (FR-018a). La venta emitida guarda además el instante efectivamente
+usado en `sales.promotion_evaluated_at` (FR-011a), consultable desde su detalle. **Lo que NO
+cambia**: el **estado** de la promoción (activa / pausada / eliminada) se sigue leyendo vivo en
+cada cálculo —`active_variant_set_rules` consulta la tabla `promotions` en cada llamada—, sin
+congelar ni guardar historial de estados (FR-009a); la agrupación de líneas para el umbral de
+cantidad (`evaluate_variant_sets`) tampoco cambia; y `evaluate_variant_sets` / `_valid_now` /
+`active_variant_set_rules` conservan su firma y su comportamiento —solo cambia qué valor de `now`
+les llega desde fuera—.
+
+**Por qué cambia**: el precio que se le cantó al cliente al **tomar** el pedido es el que se le
+debe cobrar. Hoy una mesa que pide a las 7:59 pm dentro de una promoción que vence a las 8:00 pm y
+paga a las 8:05 pm recibe una cuenta más alta que la prometida, y el cajero no tiene forma de
+corregirla porque no existe descuento manual (spec 029, Historia 2). El defecto se reprodujo con
+un pedido real: 1 cono de helado a $8.000 con una promoción del 50% llevando 2.
+
+**Quién tomó la decisión y cuándo**: propietario del repositorio / desarrollador del proyecto,
+2026-09-02, en `specs/073-fix-descuento-cobro-terminal/spec.md` —encabezado "Autorización de
+negocio", decisión (4)— y §Clarifications (sesión 2026-09-02); FR-008, FR-009, FR-012, FR-012a,
+FR-018 y FR-018a.
+
+**Funcionalidades afectadas**: en `pos-backend`, la función nueva
+`promotion_evaluation_instant` (`app/api/v1/orders/checkout.py`, junto a `auto_discount`),
+aplicada en los **ocho** call sites de `auto_discount` / `evaluate_variant_sets` que hoy deciden
+`now` con la hora del cobro: `pay_order`, `checkout_and_send`, `approve_payment_attempt` y
+`confirm_cash_payment_attempt` (`checkout.py`); `compute_bill`, `_close_unified` y `_close_split`
+(`table_sessions/service.py`); y `group_bill` —cuenta consolidada de mesas fusionadas, RF-053—
+(`orders/tables_advanced.py`). Columna nueva `promotion_evaluated_at` en `customer_orders` y
+`sales`; se puebla al crear el pedido en `orders/service.py::create_order` y en `cart/service.py`
+(flujo del comensal por QR — FR-018). `build_sale` (`sales/builder.py`) gana el kwarg
+`promotion_evaluated_at`; `SaleResponse` (`sales/schemas.py`) gana el campo. En `pos-heladeria`,
+el detalle de venta (`sales-page.component.ts`) muestra ese instante cuando la venta llevó
+descuento. **Ningún test con el prefijo bajo veto `"CONGELA comportamiento actual:"` cubre hoy el
+`now` de `auto_discount`** en `test_orders_checkout.py` / `test_table_sessions_service.py` /
+`test_cart_service.py` (verificado el 2026-09-02, `specs/073-…/plan.md` §Technical Context);
+cualquier test que hoy afirme el uso de la hora del cobro para la vigencia se actualiza **en el
+mismo commit citando `A-70`** (Principio III), con evidencia de que FR-009a (estado vivo) y
+FR-011/FR-012 (nada retroactivo) siguen intactos. Se agregan tests nuevos citando la spec 073.
+
+**Clasificación**: DECISIÓN DE NEGOCIO — deroga una regla de negocio deliberada y vigente del
+backend (evaluar la vigencia temporal de las promociones siempre con la hora del cobro). Es el
+único cambio de la spec 073 que no es restauración del comportamiento pretendido.
+
+**Tratamiento acordado**: Fase 6 (US4) de `specs/073-fix-descuento-cobro-terminal/tasks.md`
+(tareas T026–T036, más T027a y T030a). Esta entrada `A-70` debe existir **antes** de implementar
+el paso 3 del flujo de `contracts/vigencia-congelada-promocion.md` (tarea T001, bloqueante de
+T008 y de toda la Fase 6). **No retroactivo** (Principio VII): ninguna venta ni factura ya emitida
+se recalcula ni cambia de importe o representación; la columna nueva nace `NULL` en el 100 % de
+las filas existentes, sin ningún `UPDATE`, y los pedidos sin instante congelado se siguen
+evaluando con la hora del cobro.
+
 ---
 
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
