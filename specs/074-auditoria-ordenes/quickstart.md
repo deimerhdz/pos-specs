@@ -48,3 +48,35 @@ python -m unittest discover -s app/characterization_tests -p 'test_*.py'
 - No hay endpoint propio de este sistema para "ver el historial de una orden" (FR-008) — la consulta siempre es en el panel externo de Sentry, filtrando por `order_id`.
 - Los eventos dejan de ser recuperables una vez pasada la ventana de retención del plan de Sentry contratado (7 a 30 días, SC-004) — no hay respaldo ni exportación adicional en este feature.
 - Referencias completas de payload: `contracts/order-audit-log-event.md`. Reglas de validación completas: `data-model.md`.
+
+## 3. Validación automatizada de la extensión (logging operativo, FR-015–FR-021)
+
+```bash
+cd pos-backend
+python -m unittest app.characterization_tests.test_operational_log -v
+```
+
+Qué debe confirmar esta corrida (ver `research.md` § 7-11 y `data-model.md` § Reglas de validación — extensión):
+
+- Una petición `POST`/`PUT`/`PATCH`/`DELETE` a cualquier ruta fuera de `/api/v1/super-admin` genera una entrada con `method`/`route`/`status`/`duration_ms`/`request_id` (`contracts/operational-log-entry.md`); `route` es el patrón registrado (p. ej. `/orders/{order_id}/cancel`), no la URL con el UUID real.
+- Una petición `GET`/`HEAD`/`OPTIONS` no genera ninguna entrada.
+- Una petición a `/api/v1/super-admin` no genera ninguna entrada de esta extensión (sigue con su mecanismo propio, sin cambios).
+- El nivel de severidad usado al llamar a `sentry_sdk.logger.*` corresponde al `status`: `info` (`<400`), `warning` (`400-499`), `error` (`>=500`).
+- Ningún atributo de la entrada contiene el cuerpo de la petición ni de la respuesta.
+- Las 3 dependencias modificadas (`get_tenant`, `get_current_user`, `get_session_context`) siguen devolviendo exactamente lo mismo que antes a quien las invoca — el side-effect en `request.state` no cambia su valor de retorno.
+- Una de las 8 rutas ya auditadas (p. ej. `POST /orders/{order_id}/cancel`) genera **ambas** entidades: el evento de auditoría de orden (con su `request_id` incluido, FR-021) y la entrada de log operativo — ninguna reemplaza a la otra.
+- Si se fuerza una excepción dentro del middleware nuevo (mockeado), la petición real completa su respuesta igual, sin propagar el error.
+
+También corre la suite completa (incluye lo anterior, más `test_order_audit_log.py` y todos los characterization tests preexistentes — este cambio se monta sobre casi todas las rutas del backend, así que una regresión aquí tendría el radio de impacto más amplio de todo el spec):
+
+```bash
+python -m unittest discover -s app/characterization_tests -p 'test_*.py'
+```
+
+## 4. Validación manual end-to-end de la extensión
+
+1. Con `ENVIRONMENT=prod` y `SENTRY_DSN` de prueba (igual que en el paso 2), ejecuta cualquier acción mutativa fuera de las 8 ya auditadas — p. ej. `PATCH` sobre un método de pago desde la Terminal, o crear una categoría.
+2. En el panel de Sentry (Logs), filtra por el `request_id` de esa petición (visible en la cabecera de respuesta o en los logs locales de la petición).
+3. Verifica que aparece una entrada con método/ruta/status/duración/`request_id`, sin ningún campo con el cuerpo enviado.
+4. Repite el flujo del paso 2 de la sección anterior (crear + confirmar + pagar una orden) y confirma que, para cada una de esas peticiones, aparecen **ambas** entidades — el evento `order.*` y la entrada operativa genérica — con el mismo `request_id`.
+5. Ejecuta una petición `GET` cualquiera (p. ej. listar categorías) y confirma que no aparece ninguna entrada operativa para ella.

@@ -149,6 +149,58 @@ description: "Task list for feature implementation"
 
 ---
 
+## Phase 8: Foundational — extensión de logging operativo (FR-015–FR-021, bloqueante para Phase 9)
+
+**Purpose**: el middleware nuevo y la disponibilidad de actor/tenant en `request.state`, compartidos por toda la User Story 4. Ver `research.md` §7-8 y `plan.md` § Extensión.
+
+**⚠️ CRITICAL**: este middleware se monta sobre prácticamente todas las rutas del backend (~20 routers) — es el cambio de mayor radio de impacto de todo este spec. Ningún paso de esta fase puede alterar el comportamiento ni el valor de retorno de las 3 dependencias que ya usa el resto del sistema.
+
+- [X] T044 Modificar `get_tenant` en `pos-backend/app/core/db.py`: además de su comportamiento actual (sin cambios), estampar `req.state.tenant_id = tenant.id` como efecto colateral antes de devolver `tenant` — ya recibe `req: Request`, no requiere cambio de firma
+- [X] T045 Modificar `get_current_user` en `pos-backend/app/core/dependencies.py`: añadir el parámetro `req: Request` (FastAPI lo inyecta solo, no rompe a quien la usa vía `Depends`) y, antes de devolver `user`, estampar `req.state.actor_id = str(user.id)` y `req.state.actor_type = "staff"`
+- [X] T046 Modificar `get_session_context` en `pos-backend/app/core/qr_context.py`: añadir el parámetro `req: Request` y, dentro del generador, estampar `req.state.actor_id = str(ctx.participant.id)` y `req.state.actor_type = "comensal"` antes de `yield ctx`
+- [X] T047 Implementar la clase `OperationalLogMiddleware` en `pos-backend/app/core/error_middleware.py` (junto al `RequestIdMiddleware` existente, sin modificarlo): en `dispatch`, si `request.method not in {"POST","PUT","PATCH","DELETE"}` o la ruta empieza por `/api/v1/super-admin`, delega en `call_next` sin más; en caso contrario, estampa `request.state.request_id` si no está seteado, mide la duración con `time.monotonic()` alrededor de `await call_next(request)`, lee `request.scope.get("route")` para el patrón de ruta (research.md §10), arma los atributos planos (`method`, `route`, `status`, `duration_ms`, `actor_id`/`actor_type`/`tenant_id` si están en `request.state`, `request_id`), decide el nivel según `status` (research.md §9: `<400` info, `400-499` warning, `>=500` error) y llama a `sentry_sdk.logger.*` con esos atributos — todo envuelto en un `try/except` que nunca deja propagar una excepción ni altera la `Response` real (contracts/operational-log-entry.md)
+- [X] T048 Montar `OperationalLogMiddleware` en `pos-backend/app/main.py` (`app.add_middleware(OperationalLogMiddleware)`, sin `path_prefix` — el filtrado de alcance ya vive dentro de la clase)
+- [X] T049 [P] Añadir el parámetro opcional `request_id: Optional[str] = None` a `record_order_audit_event` en `pos-backend/app/core/order_audit.py`: cuando no es `None`, se incluye como atributo plano `request_id` en el payload aplanado (FR-021; `data-model.md` ya lo define)
+- [X] T050 [P] Tests de humo en `pos-backend/app/characterization_tests/test_operational_log.py` (nuevo archivo): `get_tenant`, `get_current_user` y `get_session_context` siguen devolviendo exactamente lo mismo que antes de T044-T046 a quien las invoca — el side-effect en `request.state` no cambia su tipo de retorno ni su valor (safeguard de Principio II, research.md §11)
+- [X] T051 Tests unitarios de `OperationalLogMiddleware` en `pos-backend/app/characterization_tests/test_operational_log.py` (mismo archivo que T050, secuencial), mockeando `sentry_sdk.logger.*`: el nivel usado corresponde al `status` (info/warning/error); ningún atributo contiene el cuerpo de la petición/respuesta; una excepción forzada dentro del middleware (mockeada) nunca se propaga ni altera la `Response` real
+
+**Checkpoint**: middleware y side-effects listos y probados — puede empezar la verificación de User Story 4.
+
+---
+
+## Phase 9: User Story 4 - Depurar un incidente en producción con trazabilidad técnica de cualquier acción (Priority: P2)
+
+**Goal**: toda petición mutativa fuera de super-admin deja una entrada operativa en Sentry (método/ruta/status/duración/`request_id`, sin cuerpo); las 8 rutas de orden ya auditadas quedan correlacionadas con esa entrada por el mismo `request_id`.
+
+**Independent Test**: ejecutar los 3 Acceptance Scenarios de US4 (una acción mutativa fuera de las 8 auditadas; una lectura; una de las 8 rutas de orden) y verificar en el mock de `sentry_sdk.logger` que cada una produce exactamente las entradas esperadas.
+
+### Tests for User Story 4 ⚠️
+
+> T055 depende de T056-T057 (Implementation) para pasar — escribirlo primero y verlo fallar es intencional, igual que en las fases anteriores.
+
+- [X] T052 [US4] Integration test (vía `TestClient`, mockeando `sentry_sdk`): una petición `PATCH`/`PUT` a una ruta mutativa fuera de órdenes y de super-admin (p. ej. `payment-methods`) produce una entrada operativa con `method`/`route`/`status`/`duration_ms`/`request_id`, sin ningún atributo con el cuerpo enviado — en `pos-backend/app/characterization_tests/test_operational_log.py`
+- [X] T053 [US4] Integration test: una petición `GET` (p. ej. listar categorías) no produce ninguna entrada operativa — mismo archivo
+- [X] T054 [US4] Integration test: una petición mutativa a `/api/v1/super-admin/...` no produce ninguna entrada de `OperationalLogMiddleware` (sigue solo con `RequestIdMiddleware`/`register_error_handlers`, sin cambios) — mismo archivo
+- [X] T055 [US4] Integration test: `POST /orders/{order_id}/cancel` (una de las 8 rutas ya auditadas) produce **ambas** entidades — el evento `order.cancelled` y la entrada operativa — con el mismo `request_id` en las dos — mismo archivo
+
+### Implementation for User Story 4
+
+- [X] T056 [US4] En `pos-backend/app/api/v1/cart/service.py` y `pos-backend/app/api/v1/cart/router.py`: pasar `request_id=request.state.request_id` (u obtenerlo del `Request` inyectado en el router y propagarlo al servicio) a las 3 llamadas a `record_order_audit_event` ya existentes (`submit_cart` ×2, `create_payment_attempt`)
+- [X] T057 [US4] En `pos-backend/app/api/v1/orders/checkout.py`, `pos-backend/app/api/v1/orders/service.py` y `pos-backend/app/api/v1/orders/router.py`: mismo cambio para las 6 llamadas a `record_order_audit_event`/`_record_order_confirmed` restantes (`confirm_order`, `confirm_cash_payment_attempt`, `approve_payment_attempt`, `reject_payment_attempt`, `cancel_order`, `checkout_and_send`, `create_order`)
+
+**Checkpoint**: User Story 4 completa — corre T052-T055 y confirma que pasan (FR-015–FR-021, SC-006, SC-007, SC-008).
+
+---
+
+## Phase 10: Polish & Cross-Cutting Concerns (extensión)
+
+- [X] T058 [P] Correr la suite completa de characterization tests: `python -m unittest discover -s app/characterization_tests -p 'test_*.py'` (desde `pos-backend/`) — cero regresiones; es el cambio de mayor radio de impacto de todo este spec (se monta sobre ~20 routers)
+- [X] T059 Ejecutar la validación automatizada de `specs/074-auditoria-ordenes/quickstart.md` §3 (`python -m unittest app.characterization_tests.test_operational_log -v`) y confirmar que todas las aserciones descritas ahí pasan
+- [X] T060 [P] Revisión manual: confirmar que ningún llamador existente de `get_tenant`, `get_current_user` o `get_session_context` (fuera de los tests nuevos) se vio afectado por el parámetro `req`/el side-effect añadido en T044-T046
+- [ ] T061 Validación manual end-to-end contra un proyecto Sentry de prueba, siguiendo `specs/074-auditoria-ordenes/quickstart.md` §4 (opcional, antes de cerrar la extensión)
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -159,10 +211,13 @@ description: "Task list for feature implementation"
 - **US2 (Phase 4)**: depende de Foundational, y específicamente de que T022 (la integración base de `_confirm_order_impl`) ya exista, porque T029/T030 modifican esa misma integración para añadir el parámetro `trigger`.
 - **US3 (Phase 5)**: depende de Foundational (T006, el hash) y de que T019/T021/T024/T025 (las integraciones base que construyen `details`) ya existan, porque T033-T035 añaden campos a esos mismos `details`.
 - **Polish (Phase 6)**: depende de que las historias que se vayan a entregar ya estén completas.
+- **Foundational extensión (Phase 8)**: independiente de las Phases 1-7 (ya completas) salvo por reutilizar `record_order_audit_event` (T049 lo modifica, no lo reemplaza). Bloquea Phase 9.
+- **US4 (Phase 9)**: depende de Phase 8 completa (el middleware y los side-effects en `request.state` deben existir antes de poder probarlos o de poder pasarles `request_id` a los eventos de orden).
+- **Polish extensión (Phase 10)**: depende de que Phase 9 esté completa.
 
 ### Notas de archivo compartido (afecta el uso de [P])
 
-`pos-backend/app/api/v1/orders/checkout.py` concentra 5 de los 7 puntos de integración (T022-T026, T029-T030, T035) — esas tareas son secuenciales entre sí (mismo archivo), nunca `[P]`, aunque pertenezcan a historias distintas. Lo mismo aplica a `pos-backend/app/characterization_tests/test_order_audit_log.py` (T008-T018, T027-T028, T031-T032): todas las tareas de test comparten ese único archivo y se ejecutan en el orden listado, no en paralelo entre sí.
+`pos-backend/app/api/v1/orders/checkout.py` concentra 5 de los 7 puntos de integración (T022-T026, T029-T030, T035) — esas tareas son secuenciales entre sí (mismo archivo), nunca `[P]`, aunque pertenezcan a historias distintas. Lo mismo aplica a `pos-backend/app/characterization_tests/test_order_audit_log.py` (T008-T018, T027-T028, T031-T032): todas las tareas de test comparten ese único archivo y se ejecutan en el orden listado, no en paralelo entre sí. En la extensión, `pos-backend/app/characterization_tests/test_operational_log.py` (T050-T055) tiene el mismo tratamiento — un solo archivo, secuencial — y T057 vuelve a tocar `checkout.py`, por lo que es secuencial respecto a cualquier tarea futura sobre ese archivo, aunque no coincida en el tiempo con T022-T026/T029-T030/T035 (ya completas).
 
 ### Dentro de cada historia
 
@@ -174,6 +229,9 @@ description: "Task list for feature implementation"
 - T002 y T003 (Setup) — archivos distintos.
 - T008 (test del hash) puede escribirse en paralelo con el desarrollo de T007 (la implementación de `record_order_audit_event`), ya que prueba una función distinta (`_hash_sensitive`, T006) — se marca `[P]`.
 - T036 y T038 (Polish) — no dependen entre sí ni tocan el mismo archivo.
+- T044, T045 y T046 (Foundational extensión) — 3 archivos distintos (`db.py`, `dependencies.py`, `qr_context.py`), sin dependencia entre sí — podrían marcarse `[P]`, aunque se numeraron en secuencia por simplicidad de revisión (cada una es un cambio de una sola línea).
+- T049 (parámetro `request_id` en `order_audit.py`) es independiente de T044-T048 (archivo distinto) — se marca `[P]`.
+- T058 y T060 (Polish extensión) — no dependen entre sí ni tocan el mismo archivo.
 
 ---
 
@@ -204,3 +262,12 @@ Task: "Crear el módulo vacío pos-backend/app/core/order_audit.py con su docstr
 4. + User Story 3 → validar independientemente → cierra el requisito de protección de datos antes de ir a producción (bloqueante para producción real, aunque US1+US2 ya sean funcionalmente completas)
 
 **Importante**: aunque US1 y US2 son ambas P1, no se debe considerar el feature listo para producción sin US3 — enviar `display_name`/`receipt_file_url` en texto plano a un proveedor externo (Sentry) incumple FR-005, un requisito no negociable del spec original.
+
+### Extensión: logging operativo (Phases 8-10, FR-015–FR-021)
+
+Con US1-US3 ya en producción, esta extensión es un incremento independiente y opcional en el sentido de que US1-US3 siguen siendo funcionalmente completas sin ella — pero, dado su alcance (todo el backend salvo super-admin) y que toca 3 dependencias muy compartidas, se recomienda:
+
+1. Completar Phase 8 (Foundational extensión) por completo antes de tocar Phase 9 — no tiene sentido probar la User Story 4 sin el middleware ni los side-effects de actor/tenant.
+2. Tras Phase 8, correr la suite completa de characterization tests **antes** de seguir a Phase 9 — es el punto donde, si algo de T044-T048 rompió alguna dependencia compartida, se detecta más barato (antes de construir más encima).
+3. Completar Phase 9 (US4) y validar sus 4 Acceptance Scenarios.
+4. Phase 10 (Polish) cierra con la misma suite completa + la validación de quickstart.md, exactamente igual que se hizo para US1-US3 y para la adenda de `checkout_and_send` (Phase 7).
