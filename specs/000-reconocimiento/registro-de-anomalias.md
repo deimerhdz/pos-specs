@@ -2058,6 +2058,66 @@ se recalcula ni cambia de importe o representación; la columna nueva nace `NULL
 las filas existentes, sin ningún `UPDATE`, y los pedidos sin instante congelado se siguen
 evaluando con la hora del cobro.
 
+### A-71 — [DECISIÓN DE NEGOCIO — spec 078] El menú de navegación global se colapsa en tablet en toda la aplicación; la tarjeta de Domicilio pasa a mostrar el total real
+
+**Qué cambia**:
+1. A ancho de tablet (768–1023px), el menú de navegación global de la aplicación pasa a estar
+   **oculto por defecto** y desplegable bajo demanda con el mismo control que ya usa en móvil
+   (hamburguesa del header → `LayoutService.toggle()`), superponiéndose al contenido — **en todas
+   las pantallas autenticadas** (`DashboardLayoutComponent` es el shell de todas), no solo en la
+   Terminal de Mesas. Antes, en tablet el menú se mantenía **fijo ocupando ancho**, igual que en
+   escritorio: el umbral "slide-over con backdrop" vs. "panel fijo de escritorio" estaba en `md`
+   (768px) y se sube a `lg` (1024px). En escritorio (≥ 1024px) y en móvil (< 768px) el
+   comportamiento **no cambia**.
+2. La tarjeta de un pedido de **Domicilio** en la pestaña "Domicilios" de la Terminal de Mesas
+   (`toOrderCardView()` en `pos-terminal.store.ts`) pasa a mostrar como total
+   `subtotal de productos post-descuento + valor del domicilio (delivery_fee)` — el **mismo importe
+   que se cobra** y que devuelve `GET /orders/{id}/checkout-preview` —, en lugar de solo el
+   subtotal de productos. Un único total combinado, sin línea aparte.
+
+**Por qué cambia**:
+1. Liberar ancho de pantalla en tablet para el contenido de cada pantalla (particularmente la
+   Terminal de Mesas, cuyo panel de detalle no cabía) y unificar el comportamiento del menú con el
+   de móvil. El comportamiento colapsable en móvil ya está completo (slide-over, backdrop, toggle,
+   auto-cierre por navegación); "darle a tablet lo mismo" es literalmente subir el umbral, sin
+   crear ninguna variante ni control nuevo.
+2. La tarjeta mostraba un importe **menor** del que realmente se factura — riesgo de que el cajero
+   creyera cobrar de menos en pedidos a domicilio. La regla "el total de un domicilio incluye el
+   valor del domicilio" ya fue autorizada por spec 056 para el cobro; la tarjeta simplemente no la
+   reflejaba (defecto de visualización, no una regla de negocio nueva).
+
+**Quién tomó la decisión y cuándo**: propietario / desarrollador del proyecto, 2026-09-07, en
+`specs/078-fix-terminal-mesas-responsive/spec.md` — encabezado "Autorización de negocio", sección
+"Impacto sobre comportamiento existente y decisiones de negocio" (puntos 1 y 3) y dos sesiones de
+§Clarifications del mismo día; FR-001–FR-006 (tarjeta) y FR-031–FR-036 (menú en tablet).
+
+**Funcionalidades afectadas**:
+1. Todas las pantallas de la aplicación a ancho de tablet — cambia únicamente la **presentación**
+   del menú de navegación (mostrar/ocultar). Ninguna opción, orden ni destino del menú cambia.
+   Código en `pos-heladeria`: `dashboard/layout/layout.service.ts` (`DESKTOP_BREAKPOINT_PX`
+   768→1024; valor inicial de `sidebarOpen`) y `dashboard/layout/dashboard-layout.component.ts`
+   (`md:ml-64`→`lg:ml-64`, backdrop `md:hidden`→`lg:hidden`, auto-cierre por navegación
+   `innerWidth < 768`→`< 1024`). `sidebar.component.ts` **no** cambia (su `translate` ya depende
+   solo de `sidebarOpen()`). Escritorio y móvil sin cambios.
+2. Solo la **visualización** de la tarjeta de pedidos de Domicilio **pendientes de cobro** en la
+   Terminal de Mesas (`pos-terminal.store.ts::toOrderCardView`). Ninguna venta ni factura ya
+   emitida se recalcula (Principio VII); un `delivery_fee` nulo (pedidos anteriores a spec 056) se
+   trata como cero, igual que ya hace el cobro. Los pedidos de mesa y "Para llevar" no cambian
+   (`delivery_fee` nulo → mismo valor de hoy). Revierte de forma trazable la fila `totalLabel` de
+   `specs/059-terminal-mesas-carga-y-pedidos/data-model.md` ("la tarjeta muestra `orderSubtotal()`,
+   no incluye el domicilio").
+
+**Clasificación**: DECISIÓN DE NEGOCIO. El punto 1 (menú en tablet) deroga un comportamiento
+deliberado del shell (menú fijo en tablet) en toda la app. El punto 2 (total de la tarjeta) es una
+corrección de un defecto de visualización, registrado aquí porque toca dinero visible y para dejar
+la cadena de trazabilidad cerrada con spec 059.
+
+**Tratamiento acordado**: `specs/078-fix-terminal-mesas-responsive/tasks.md`. Esta entrada `A-71`
+debe existir **antes** de implementar la Fase 8 (US6, tareas T030–T032, que citan `A-71` en sus
+commits) y la tarea T005 (US1, cuyo commit cita `A-71` punto 2). US2–US5 no dependen de ella. **No
+retroactivo** (Principio VII): sin cambios de esquema, sin `UPDATE`, sin recálculo de ninguna venta;
+revertir los commits de frontend restaura por completo el comportamiento previo.
+
 ---
 
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
