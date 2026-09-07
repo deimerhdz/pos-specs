@@ -2118,6 +2118,75 @@ commits) y la tarea T005 (US1, cuyo commit cita `A-71` punto 2). US2–US5 no de
 retroactivo** (Principio VII): sin cambios de esquema, sin `UPDATE`, sin recálculo de ninguna venta;
 revertir los commits de frontend restaura por completo el comportamiento previo.
 
+### A-72 — [DECISIÓN DE NEGOCIO — spec 079] La pantalla "Órdenes" retira los botones de acceso rápido de estado, pagina y filtra en el servidor, y añade "Por confirmar" como estado filtrable
+
+**Qué cambia**:
+1. **Se retira el grupo completo de botones de acceso rápido de estado** de la pantalla "Órdenes"
+   (`/dashboard/orders`): hoy son cinco píldoras —Todas / Abiertas / Bloqueadas / Pagadas /
+   Canceladas— que filtran el listado **en el cliente** sobre el conjunto completo ya descargado.
+   Los estados migran a un `<select>` desplegable de estado (US2, FR-008/FR-010); el acceso rápido
+   "Bloqueadas" **no se reintroduce** como control propio (FR-014), aunque "Bloqueada" sigue
+   disponible como opción del `<select>` y las órdenes bloqueadas siguen apareciendo sin filtro
+   (FR-015). **Si US1 se despliega antes que US2, la pantalla "Órdenes" queda sin ningún filtro de
+   estado en esa ventana** — es una consecuencia aceptada del troceado en historias.
+2. **El filtrado de "Órdenes" pasa de cliente a servidor**: junto con la paginación, `GET /orders`
+   gana los parámetros `status` (semántica ampliada a "estado que ve la persona": "Pagada" = venta
+   emitida **o** `status='pagada'` crudo, en ambos casos si no está cancelada; los no terminales
+   excluyen las que ya tienen venta) y `order_type`, resueltos con predicados SQL antes del
+   `OFFSET/LIMIT` (FR-011/FR-012/FR-016/FR-018, [data-model.md §3](../079-paginacion-ordenes-mesas/data-model.md)).
+3. **El listado deja de mostrar todas las órdenes de una vez y pasa a segmentarse en páginas**
+   (`page`/`size` opt-in, tamaño por defecto 20; barra "Anterior/Siguiente" + "Página X de Y",
+   FR-001/FR-002). Hoy la pantalla descarga y pinta el conjunto completo.
+4. **Se añade "Por confirmar" (`recibida`) como opción del filtro de estado**, hoy inexistente en
+   esta pantalla (FR-008).
+
+**Por qué cambia**: "Órdenes" es la pantalla que más crece del sistema —una fila por comanda, sin
+techo— y hoy descarga y pinta el conjunto entero en cada carga; con miles de órdenes acumuladas la
+pantalla se degrada sin límite (SC-001, SC-002). Llevar la paginación y el filtrado al servidor es
+el patrón ya vigente en Ventas, Inventario y Auditoría; esta spec solo lo extiende a las dos
+pantallas que faltaban. El retiro de los botones de acceso rápido y el nuevo estado "Por confirmar"
+son peticiones explícitas del negocio recogidas en el spec y sus aclaraciones.
+
+**Quién tomó la decisión y cuándo**: propietario / desarrollador del proyecto, 2026-09-07, en
+`specs/079-paginacion-ordenes-mesas/spec.md` —encabezado, sección "Impacto sobre el Sistema
+Existente" y las 8 aclaraciones de esa fecha (§Aclaraciones): alcance opt-in de la paginación (solo
+"Órdenes"), alcance del "módulo de mesas" (solo "Mesas"), comportamiento de los filtros
+(independientes, selección única, combinables, en servidor), tratamiento del filtro "Bloqueadas"
+(se quita solo el botón rápido), 6 valores exactos del filtro de estado, tratamiento de "Pagada",
+clamp a la última página válida y desempate determinista.
+
+**Funcionalidades afectadas**: solo la pantalla "Órdenes" de `pos-heladeria`
+(`modules/orders/pages/orders-page.component.ts` + el servicio de transporte nuevo
+`modules/orders/services/orders-list.service.ts`), **incluida la ausencia temporal del filtrado por
+estado entre el despliegue de US1 y el de US2**. En `pos-backend`, `GET /orders` gana parámetros
+`page`/`size`/`order_type` y amplía la semántica de `status` **solo en el modo paginado**; **sin
+esos parámetros la respuesta y el comportamiento (array JSON + `ETag` + `304`, `active_sessions_only`,
+`status` crudo) son idénticos a hoy** (FR-023/FR-024). Los demás consumidores de `GET /orders`
+—Terminal de Mesas (`pos-terminal.store.ts`), Dashboard (`admin-dashboard.component.ts`)— y todas
+las superficies de cobro ("Pagos por confirmar" incluida) **no cambian** (FR-024). Ningún test con
+el prefijo bajo veto `"CONGELA comportamiento actual:"` cubre hoy un filtrado por `status` en
+`GET /orders` (verificado el 2026-09-07: el frontend filtra en cliente y la Terminal solo pasa
+`active_sessions_only`); se añaden tests nuevos citando la spec 079 para ambos caminos (modo
+compatible y modo paginado). **La pantalla "Mesas" (US3) NO entra en este condicionamiento**: su
+paginación conserva el conjunto y el orden (`number ASC`) y no cambia ningún comportamiento
+observable más allá de segmentar en páginas — por eso US3 no depende de `A-72`.
+
+**Clasificación**: DECISIÓN DE NEGOCIO. El punto 1 (retiro de los botones de acceso rápido) y el
+punto 4 (nuevo estado "Por confirmar") derogan/amplían comportamiento deliberado de la pantalla
+"Órdenes". Los puntos 2 y 3 (filtrado y segmentación server-side) son un cambio de mecanismo de una
+pantalla cuya salida sin parámetros se conserva byte a byte; se registran aquí para dejar la cadena
+de trazabilidad cerrada (Necesidad → `spec.md` + Aclaraciones → `plan.md` → `research.md` →
+`tasks.md` → `A-72`).
+
+**Tratamiento acordado**: `specs/079-paginacion-ordenes-mesas/tasks.md`. Esta entrada `A-72` debe
+existir **antes** de implementar las Historias 1 y 2 (Fases 3 y 4; los commits de frontend y del
+router paginado de esas fases citan `A-72`, empezando por T010 —retiro de los botones de acceso
+rápido—). La Historia 3 (Fase 5, paginación de "Mesas") **no** depende de ella. **No retroactivo**
+(Principio VII): sin cambios de esquema, sin migración de Alembic, sin `UPDATE`; ninguna orden
+histórica sin `order_type` se rellena ni se modifica (se muestra "Sin especificar" y queda fuera al
+filtrar por un tipo, FR-018); revertir los commits de frontend de US1+US2 restaura por completo el
+comportamiento previo de la pantalla "Órdenes".
+
 ---
 
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
