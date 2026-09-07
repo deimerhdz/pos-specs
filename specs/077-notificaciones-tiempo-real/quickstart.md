@@ -22,7 +22,17 @@ Guía para comprobar, de punta a punta, que la funcionalidad cumple el checklist
 
 ## 2. Push del navegador con la pestaña sin foco (US3, SC-003)
 
-1. Con el cajero del paso 1, conceder el permiso de notificaciones push cuando el POS lo solicite (primer login o desde el centro de notificaciones).
+**Requiere un build de producción — `ng serve` normal no sirve para este escenario.** `app.config.ts` registra el Service Worker con `enabled: !isDevMode()`, y `angular.json` fija `defaultConfiguration: "development"` para el target `serve`: con `ng serve` a secas el Service Worker (y por tanto `push-sw.js`, y el botón "Activar avisos push" del header, que depende de `SwPush.isEnabled`) nunca se activa. Usar en su lugar:
+
+```bash
+cd ../pos-heladeria
+ng build --configuration production
+# servir dist/frontend/browser con cualquier servidor estático, o:
+ng serve --configuration production
+```
+
+1. Con el cajero del paso 1 (sobre el build de producción), conceder el permiso de notificaciones push desde el centro de notificaciones ("Activar avisos push").
+   - **Primera visita del navegador**: si el botón responde pidiendo recargar la página en vez de mostrar el permiso del navegador, es esperado — el Service Worker recién instalado todavía no controla esta carga de página (no llama `clients.claim()`); recargar una vez y volver a intentarlo.
 2. Minimizar el navegador o cambiar a otra pestaña.
 3. Repetir el paso 2 del escenario 1 (confirmar otro pedido).
 4. **Esperado**: llega una notificación del sistema operativo/navegador equivalente al aviso en la aplicación.
@@ -32,6 +42,7 @@ Guía para comprobar, de punta a punta, que la funcionalidad cumple el checklist
 
 1. Con el pedido del paso 1 ya creado, cobrar la cuenta desde el POS del cajero (Terminal de Mesas o panel de cobro).
 2. **Esperado**: la pestaña del menú QR del comensal (sin recargar) muestra la confirmación de pago en menos de 5 s.
+3. **Repetir con el comensal dentro del asistente de checkout** (`/menu/t/:token/checkout/...` — p. ej. parado en el paso "método de pago" o "confirmación", eligiendo cómo pagar su parte): cobrar la mesa desde el POS del cajero en ese momento. **Esperado**: al volver el comensal a `/menu/t/:token`, el banner de confirmación de pago aparece igual — la conexión SSE (`DinerShellComponent`) sobrevive a la navegación por el checkout, así el evento no se pierde (corrección post-implementación).
 
 ## 4. Aislamiento entre tenants (US2, SC-005)
 

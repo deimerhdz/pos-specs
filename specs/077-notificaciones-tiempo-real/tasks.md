@@ -156,6 +156,19 @@ description: "Task list for Notificaciones en Tiempo Real Multi-Tenant"
 
 ---
 
+## Fase 9: Corrección post-implementación (bugs reportados en pruebas manuales)
+
+**Propósito**: T039 dejó pendiente la validación manual en navegador de US1 (vivo, sin recargar), US3 (push) y US4 (comensal). Al hacerla, el usuario reportó 4 síntomas; se diagnosticaron con agentes de exploración de solo lectura contra el código real, confirmando 2 bugs de código concretos y 1 limitación esperada de Angular (con un bug latente de producción real dentro de ella). No se crea una spec nueva — esta fase corrige la 077 ya implementada.
+
+- [X] T042 [P] Agregar `'notification.created'` a `KNOWN_EVENT_TYPES` en `../pos-heladeria/src/app/core/realtime/sse-client.ts` — sin esto, `EventSource.addEventListener` nunca se registraba para ese nombre de evento (lista hardcodeada) y el frame se descartaba en silencio antes de llegar a `RealtimeService.emit()`. Causa raíz de "la campanita no se actualiza si no recargo" y "no se muestra el aviso fuera de Terminal de Mesas" (T020/T021)
+- [X] T043 [US4] Mover la conexión SSE del comensal de `PublicMenuComponent` a un nuevo `DinerShellComponent` (padre sin `path` que envuelve `menu/t/:token` y `menu/t/:token/checkout/**` en `../pos-heladeria/src/app/app.routes.ts`) — las dos rutas eran hermanas, así que navegar al checkout destruía `PublicMenuComponent` y con él la única conexión SSE del comensal durante todo el asistente de pago, justo cuando envía su pedido o el cajero puede cobrar. Mismo patrón que T018 ya aplicó del lado del staff (`DashboardLayoutComponent`). Incluye: `diner-shell.component.ts` nuevo (reacciona a `DinerTokenStore.token()` con un `effect()`), `public-menu.component.ts::connectRealtime()`/`disconnectRealtime()` dejan de abrir/cerrar la conexión directamente (solo gestionan sus propios `rtOff`), y `exit()` ahora llama `tokenStore.clear()` para seguir cerrando el stream al salir — depende de T018, T034
+- [X] T044 Robustez del canal push en producción: `push-registration.service.ts::register()` ahora detecta `navigator.serviceWorker.controller === null` (primera visita, Service Worker instalado pero todavía sin controlar la página — `ngsw-worker.js` no llama `clients.claim()`) y devuelve `{ok: false, reason: 'needs-reload'}` en vez de dejar `requestSubscription()` colgado indefinidamente sin ningún error visible; `header.component.ts::enablePush()` interpreta el resultado y muestra un mensaje claro (`ToastService`) pidiendo recargar o reportando el error, en vez de ocultarlo en silencio — depende de T029, T030
+- [X] T045 [P] Actualizar `quickstart.md` §2 (push) con la aclaración de que probar US3 exige un build de producción (`ng build --configuration production` o `ng serve --configuration production`) — `ng serve` normal nunca activa el Service Worker (`app.config.ts`: `enabled: !isDevMode()`), y §3 (comensal) con el escenario de checkout de T043 — depende de T042, T043, T044
+
+**Checkpoint**: build limpio (`tsc --noEmit`, `ng build` dev+producción, `push-sw.js`/`ngsw-worker.js` presentes en el build de producción) y los 727 tests de `pos-backend` sin regresión (backend no se tocó en esta fase). T042 verificado end-to-end con una conexión SSE real: se abrió `GET /realtime/stream` con un ticket real y, al disparar `notify_order_created(...)` en otro proceso, el frame `event: notification.created` llegó completo por esa conexión — confirma que el backend siempre emitió correctamente el evento que el frontend descartaba. T043/T044 requieren clic-a-clic en un navegador real (checkout del comensal con el Network tab abierto; primera visita con push en un build de producción) — pendiente de que el usuario los confirme manualmente.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
