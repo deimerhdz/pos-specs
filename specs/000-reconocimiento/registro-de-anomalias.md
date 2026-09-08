@@ -2189,6 +2189,85 @@ comportamiento previo de la pantalla "Órdenes".
 
 ---
 
+### A-73 — [DECISIÓN DE NEGOCIO — spec 080] Las imágenes de producto, logo del negocio e imagen de método de pago se guardan como key relativa; la URL de visualización se arma en el servidor contra un dominio personalizado configurable
+
+**Qué cambia**:
+1. **La subida de imagen de producto (`Product.image_url`), logo del negocio (`Tenant.logo_url`) e
+   imagen de método de pago (`PaymentMethod.payment_info`, clave con `format:"image"`, típ. `qr`)
+   pasa a persistir la _key relativa_ del objeto** (`{tenant}/{carpeta}/{archivo}`, p. ej.
+   `heladeria3/products/46f1a4d1c4aa4c68ba7b32642334d084.png`), **no** la URL pública completa
+   (`https://pub-d819ae78f038476da2ef5fa0bb171aa5.r2.dev/{key}`) que se guarda hoy. En base de datos
+   nunca vuelve a quedar esquema ni dominio (FR-001/FR-002): si al servidor llega una URL absoluta del
+   bucket gestionado —la anterior **o** la del dominio nuevo— se normaliza a key antes de persistir
+   (FR-004), incluido el caso habitual del frontend reenviando la URL de visualización al guardar un
+   formulario que no tocó la imagen.
+2. **La URL de visualización se arma en el servidor al responder**, anteponiendo a la key un dominio
+   personalizado de assets configurable (`ASSETS_BASE_URL` = `https://assets.skeilopos.com`,
+   FR-005/FR-006/FR-008). El contrato hacia los consumidores de la API no cambia: siguen recibiendo
+   una URL absoluta lista para usar por cada imagen (FR-007) — por eso `pos-heladeria` **no se toca**.
+   Una fila que todavía tenga la URL anterior se sigue viendo (tolerancia de lectura temporal,
+   FR-009b): el servidor reconoce el prefijo viejo y lo reescribe al dominio nuevo al vuelo.
+3. **`POST /uploads/presign` devuelve `public_url` contra el dominio nuevo** (`assets.skeilopos.com`
+   en vez de `pub-…r2.dev`). La respuesta (`upload_url`, `key`, `public_url`, `expires_in`), la
+   whitelist de carpetas (`products`/`logo`/`payment-methods`) y `build_object_key` **no cambian**
+   (FR-015/FR-016). El `public_url` deja de ser "lo que se guarda": en base de datos vive la key.
+4. **El extractor de key para borrar el objeto anterior al reemplazar imagen** (`key_from_public_url`
+   en `app/core/storage.py`) se reemplaza por `object_key_for_deletion`, que acepta **también** una
+   key directa (caso normal tras la migración) y devuelve `None` para referencias de otro origen, que
+   nunca se intentan borrar (FR-011/FR-013). El borrado sigue siendo best-effort y **después** del
+   `commit` (A-44 / spec 021, intacto — es precisamente la Historia 3 de la spec 080).
+
+**Por qué cambia**: desacoplar el contenido almacenado del dominio que lo sirve. Hoy, cambiar el
+dominio de las imágenes obliga a reescribir cada fila de la base de datos; con la key relativa, un
+cambio futuro de dominio es **solo** un cambio de configuración (`ASSETS_BASE_URL`), sin migración ni
+edición de datos (SC-005). Además, `assets.skeilopos.com` es un dominio propio del negocio, no el
+`pub-…r2.dev` genérico de Cloudflare.
+
+**Quién tomó la decisión y cuándo**: propietario / desarrollador del proyecto, 2026-09-08, en
+`specs/080-imagenes-key-relativa-r2/spec.md` —encabezado (descripción de la solicitud), sección
+"Impacto sobre el Sistema Existente" y las 5 aclaraciones de esa fecha (§Aclaraciones): qué se hace
+con las filas que hoy guardan la URL anterior (migración única reescribible + tolerancia de lectura),
+alcance de los comprobantes del comensal (fuera), normalización a key de cualquier URL absoluta del
+bucket gestionado (dominio viejo o nuevo) antes de persistir, e idempotencia / re-ejecutabilidad de
+la migración con la app en marcha.
+
+**Funcionalidades afectadas**: en `pos-backend`, la **subida** de las tres referencias
+(`products/service.py`, `tenant/router.py`, `sales/service.py` + los esquemas de request de
+`products`/`tenant`/`sales`); el **ensamblado en lectura** en las respuestas de `products`, `tenant`,
+`menu`, `sales` y `cart` (misma imagen, distinto dominio de origen — sin cambio observable, SC-006);
+el **borrado best-effort del objeto anterior** al reemplazar imagen (producto y logo — los métodos de
+pago no borran hoy su imagen anterior y esta spec no lo cambia, FR-011a); y `POST /uploads/presign`
+(`public_url` contra el dominio nuevo). **Los comprobantes de pago del comensal (`receipt_file_url`,
+carpeta `comprobantes`) quedan EXPLÍCITAMENTE FUERA** (FR-014): se siguen guardando con la URL
+completa y sirviéndose desde el dominio anterior, sin cambios; `R2_PUBLIC_BASE_URL` **no se repunta**
+(lo siguen usando los comprobantes y la reversión de la migración) y `cart/service.py` no se toca. El
+contrato hacia los consumidores de la API no cambia (FR-007) → **`pos-heladeria` no se toca** (0
+archivos). El único test de caracterización con desviación es
+`test_products_service.py::test_a44_fallo_de_delete_object_no_revierte_el_cambio_de_imagen`: se
+actualiza **una** aserción (`NEW_URL` → su key) citando esta entrada; el comportamiento que ese test
+congela (un fallo de `delete_object` no revierte el cambio ya persistido) **se preserva**. Los otros
+dos tests A-44 y `test_cart_payment_attempts.py` (comprobantes) **no se tocan**.
+
+**Clasificación**: DECISIÓN DE NEGOCIO. El punto 1 (persistir la key en vez de la URL pública) es un
+cambio de comportamiento deliberado y solicitado por el negocio en la subida de imágenes. Los puntos
+2–4 son las consecuencias de mecanismo de ese cambio (ensamblado en el servidor, dominio nuevo en el
+presign, extractor de key ampliado); se registran aquí para cerrar la cadena de trazabilidad
+(Necesidad → `spec.md` + Aclaraciones → `plan.md` → `research.md` → `tasks.md` → `A-73`).
+
+**Tratamiento acordado**: `specs/080-imagenes-key-relativa-r2/tasks.md`. Esta entrada `A-73` debe
+existir **antes** de implementar la Historia 1 (Fase 3; los commits de esa fase y el swap del
+extractor de borrado en la Historia 3 —T023— citan `A-73`). Las Historias 2 (migración de datos) y 3
+no dependen de `A-73` en su código, pero se despliegan después de la Historia 1, que sí la exige.
+**No retroactivo** (Principio VII): sin cambio de esquema, sin migración de Alembic. La migración de
+datos (FR-009) solo reescribe cómo la base de datos referencia la ubicación de un objeto —no mueve,
+renombra ni borra ningún objeto de R2 (FR-009a)— es idempotente y re-ejecutable con la app en marcha
+(FR-009c) y lleva estrategia `--revert` que reconstruye `{R2_PUBLIC_BASE_URL}/{key}` (SC-008).
+Ninguna factura ni venta emitida se altera: estas referencias de imagen no son parte del importe ni
+de la representación contable de una factura, y el logo se resuelve vigente en cada recibo, como hoy.
+Revertir los commits de `pos-backend` + correr `--revert` restaura el estado previo.
+
+---
+
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
 
 La entrada #1 de `memoria-historica.md` (2026-07-17, commit `8777acbc`) documenta que
