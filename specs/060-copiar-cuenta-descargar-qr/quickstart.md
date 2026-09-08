@@ -38,13 +38,15 @@ texto manualmente, y ve una confirmación efímera no bloqueante.
    corresponde exactamente al QR mostrado en pantalla.
 5. Verificar que aparece una notificación no bloqueante confirmando la descarga, que desaparece por
    sí sola a los 5 segundos.
-6. **Verificación de riesgo (research.md D2)**: si el paso 2 falla de forma consistente (la imagen
-   nunca se descarga, sin importar el navegador probado), revisar primero si el error es de red o
-   de CORS del bucket de Cloudflare R2 (inspeccionar la consola del navegador: un error de
-   `fetch`/CORS ahí confirma que es una configuración pendiente del lado de infraestructura, no un
-   defecto del componente) antes de dar la Historia 2 por completada; verificar en ese caso que de
-   todos modos aparece la notificación de error no bloqueante (FR-009), en vez de fallar en
-   silencio.
+6. **Verificación de riesgo (research.md D2 — actualizada 2026-09-08)**: si el paso 2 falla de
+   forma consistente (típicamente con un `504` o un error de CORS en la consola, y el toast de
+   error de FR-009), **el CORS del bucket R2 NO es la causa** — ya está verificado como funcional.
+   El fallo conocido es la interacción caché del navegador × Cloudflare: el `<img>` de esta misma
+   pantalla precarga el QR sin CORS y Cloudflare lo cachea ~4 h sin cabeceras CORS; luego el
+   `fetch` `mode: 'cors'` de `downloadImage()` revalida esa entrada y recibe un `504` vacío.
+   Comprobar que ese `fetch` usa `cache: 'no-store'` (`transfer-details-step.component.ts`); sin
+   ese flag el fallo es reproducible. Verificar además que, si algo falla, aparece la notificación
+   de error no bloqueante (FR-009) en vez de fallar en silencio.
 
 **Resultado esperado**: el comensal obtiene el archivo de imagen del QR sin necesidad de tomar una
 captura de pantalla, con una confirmación efímera no bloqueante.

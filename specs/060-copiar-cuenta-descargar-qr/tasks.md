@@ -174,6 +174,9 @@ mostrado; verificar la notificación de éxito de 5s (quickstart.md Escenario 2)
       D7). Depende de T015, T016. Hace pasar T011, T012, T013, T014.
 - [ ] T018 [US2] Ejecutar manualmente quickstart.md Escenario 2 (UI), incluyendo el paso de
       verificación de riesgo de CORS de R2 (research.md D2, quickstart.md paso 6)
+      > **Nota 2026-09-08**: el "riesgo de CORS de R2" quedó cerrado — el CORS del bucket sí
+      > funciona; el fallo real era caché del navegador × Cloudflare (`504`), resuelto con
+      > `cache: 'no-store'` en `downloadImage()`. Ver research.md D2 "Resolución post-implementación".
 
 **Checkpoint**: descargar la imagen del QR funciona de punta a punta, verificable de forma
 independiente de US1.
@@ -272,5 +275,9 @@ Task: "Agregar el caso 'download' en icon.component.ts (T016)"
 - T018 es la única tarea de esta spec que puede descubrir el riesgo abierto de research.md D2 (CORS
   de R2) en el mundo real — si falla de forma consistente, no es un defecto de implementación de
   T015-T017 sino una configuración pendiente de infraestructura (ver quickstart.md paso 6).
+  > **Actualización 2026-09-08**: el riesgo se materializó (`504`/error de CORS al descargar) pero
+  > **no** era infraestructura — el CORS del bucket R2 está bien; era la interacción caché del
+  > navegador × Cloudflare, resuelta con `cache: 'no-store'` en el `fetch` de `downloadImage()`
+  > (`pos-heladeria`). Detalle en research.md D2 "Resolución post-implementación".
 - Commitear después de cada tarea o grupo lógico; detenerse en cada checkpoint para validar la
   historia de forma independiente antes de continuar con la siguiente.

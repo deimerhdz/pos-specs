@@ -25,6 +25,11 @@ código estático si el bucket de R2 permite `fetch()` cross-origin (CORS de lec
 públicas de `payment-methods` — la configuración vive del lado de Cloudflare. Queda como
 verificación obligatoria (Principio X) antes de dar la Historia 2 por completada.
 
+> **Cerrado 2026-09-08** — el CORS de R2 sí está habilitado; el fallo real observado era la
+> interacción caché del navegador × Cloudflare (`504` al revalidar la entrada no-CORS que deja
+> el `<img>`), resuelto con `cache: 'no-store'` en el `fetch` de `downloadImage()`. Detalle en
+> research.md D2, "Resolución post-implementación".
+
 ## Technical Context
 
 **Language/Version**: TypeScript 5.9.2, Angular 21.1 (componentes standalone, signals, control flow
