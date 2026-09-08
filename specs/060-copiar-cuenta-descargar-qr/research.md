@@ -54,6 +54,26 @@ obligatoria de implementación** (Principio X): probar la descarga contra un QR 
 tenant de prueba antes de dar la Historia 2 por completada; si el bucket no tiene CORS habilitado
 para `GET`, es un ajuste de configuración de infraestructura (Cloudflare), no de este componente.
 
+> **Resolución post-implementación (2026-09-08)** — el riesgo queda **cerrado**, con un
+> diagnóstico distinto al que se anticipaba aquí:
+>
+> - **El CORS de lectura del bucket R2 sí está habilitado y es correcto.** Verificado contra
+>   `https://assets.skeilopos.com/...` desde el origen `https://heladeria.skeilopos.com`: el
+>   preflight `OPTIONS` responde `Access-Control-Allow-Methods: PUT, GET` y refleja el
+>   `Origin`; un `GET` con `Origin` responde `200` con `Access-Control-Allow-Origin` y
+>   `Vary: Origin`. No hacía falta ningún ajuste de infraestructura.
+> - **La causa real del fallo era la interacción caché del navegador × Cloudflare.** El
+>   `<img [src]>` de esta misma pantalla carga el QR como petición **no-CORS**; Cloudflare la
+>   deja cacheada ~4 h (`Cache-Control: max-age=14400`) sin cabeceras CORS. Cuando
+>   `downloadImage()` hace después `fetch(url, { mode: 'cors' })` con el modo de caché por
+>   defecto sobre esa **misma URL**, el navegador revalida la entrada no-CORS para una
+>   petición CORS y Cloudflare devuelve un **`504 Gateway Timeout` con respuesta vacía**
+>   (sin `Access-Control-Allow-Origin`) → el navegador lo reporta como error de CORS.
+> - **Solución aplicada** (`pos-heladeria`, `transfer-details-step.component.ts`): añadir
+>   `cache: 'no-store'` al `fetch` de `downloadImage()`, que salta la entrada de caché
+>   envenenada y va directo a la red. Reproducido antes/después: `504` + blob vacío → `200`
+>   + blob completo. Cambio 100 % del lado del cliente, sin tocar infraestructura ni backend.
+
 **Alternativas consideradas**:
 - Descargar directo con `a.href` sin `fetch` (como `TableQrComponent`) — rechazada por la razón de
   cross-origin explicada arriba: ese componente funciona porque su imagen ya es una data URL
@@ -61,15 +81,18 @@ para `GET`, es un ajuste de configuración de infraestructura (Cloudflare), no d
 - Abrir la imagen en una pestaña nueva (`window.open(url)`) como mecanismo de "descarga" — rechazada:
   no cumple la Historia 2 tal como la pide el dueño del proyecto (evitar la captura de pantalla); en
   la mayoría de navegadores móviles eso solo muestra la imagen, sin guardarla, dejando al comensal en
-  el mismo punto de partida (tener que capturarla manualmente).
+  el mismo punto de partida (tener que capturarla manualmente). _(Sigue rechazada tras la resolución
+  del 2026-09-08.)_
 - Pedirle al backend un endpoint de descarga propio que haga proxy del archivo con
   `Content-Disposition: attachment` — rechazada por ahora: agrega una ruta de backend nueva
   (`pos-backend`) para un problema que la técnica `fetch` + blob ya resuelve enteramente del lado
   del cliente, sin tocar el backend ni introducir un contrato de API nuevo (mantiene el alcance de
-  esta feature dentro de `pos-heladeria` únicamente, spec.md Assumptions). Si la verificación de
+  esta feature dentro de `pos-heladeria` únicamente, spec.md Assumptions). ~~Si la verificación de
   implementación (arriba) revela que el bucket R2 no admite CORS de lectura, esta alternativa queda
-  como la vía de respaldo a evaluar en un spec de seguimiento — no se decide de antemano sin evidencia
-  del problema real.
+  como la vía de respaldo a evaluar en un spec de seguimiento~~ **Descartada definitivamente
+  (2026-09-08): el bucket R2 sí admite CORS de lectura; el fallo real se resolvió con
+  `cache: 'no-store'` en el cliente (ver "Resolución post-implementación" arriba). Ya no hay
+  ningún motivo pendiente para un proxy de backend.**
 
 ## Decisión 3 — Nombre del archivo descargado
 
