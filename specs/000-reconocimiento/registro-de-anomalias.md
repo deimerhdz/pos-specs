@@ -2268,6 +2268,79 @@ Revertir los commits de `pos-backend` + correr `--revert` restaura el estado pre
 
 ---
 
+### A-74 — [DECISIÓN DE NEGOCIO — spec 083] El literal por defecto de variante cambia de "Single" a "Presentación única"
+
+**Qué cambia**: `ensure_default_variant` (`app/api/v1/catalog/service.py:84-102`) deja de crear la
+variante automática de un producto sin tamaños con `name="Single"` y pasa a crear
+`name="Presentación única"`. El `server_default="Single"` de `ProductVariant.name`
+(`app/models/product_variant.py:25`) se actualiza al mismo texto por consistencia documental (nunca
+es la ruta de escritura real: el ORM siempre pasa `name` explícito). Es un cambio observable en
+producción: el nombre de variante que ve el administrador, que aparece en recibos, en el Menú QR y en
+el selector de reglas de promoción, para todo producto **nuevo** creado sin variantes explícitas ni
+presentaciones de categoría asociadas.
+
+**Por qué cambia**: "Single" es un literal en inglés que quedó de una versión anterior del producto;
+el negocio pidió una etiqueta en español consistente con el resto de la interfaz. No cambia el
+comportamiento de creación ni el precio inicial (sigue naciendo en $0) — es un renombre de superficie.
+
+**Quién tomó la decisión y cuándo**: propietario / desarrollador del proyecto, 2026-09-16, en
+`specs/083-presentaciones-y-promociones/spec.md` §Clarifications, pregunta 2.
+
+**Funcionalidades afectadas**: en `pos-backend`, `catalog/service.py::ensure_default_variant` y el
+`server_default` documental de `ProductVariant.name`. El characterization test
+`test_products_service.py::test_sin_variants_sigue_creando_single_automatica_back_compat` (RN-CAT-05)
+se actualiza para esperar `"Presentación única"` en vez de `"Single"`, citando esta entrada. Ningún
+`ProductVariant.name = 'Single'` ya persistido en productos existentes se renombra retroactivamente
+(fuera de alcance, spec.md §Assumptions) — Principio VII intacto.
+
+**Clasificación**: DECISIÓN DE NEGOCIO.
+
+**Tratamiento acordado**: `specs/083-presentaciones-y-promociones/tasks.md`. Esta entrada `A-74` debe
+existir **antes** de mergear el commit que renombra el literal (T022) y el que actualiza el test de
+caracterización (T024) — ambos la citan. **No retroactivo** (Principio VII): sin cambio de esquema,
+sin migración de datos sobre `product_variants` existentes. Revertir el commit de `catalog/service.py`
+restaura por completo el literal anterior.
+
+---
+
+### A-75 — [DECISIÓN DE NEGOCIO — spec 083, corrección post-pruebas] `POST /promotions` permite crear una promoción `Borrador` sin ninguna regla todavía
+
+**Qué cambia**: `PromotionCreate.rules` (`app/api/v1/promotions/schemas.py`) deja de exigir
+`min_length=1` y pasa a aceptar una lista vacía — pero **solo** cuando el `status` de creación es
+`draft`. Si se intenta crear directamente con `status=active` y `rules` vacío, el validador rechaza
+con el mismo mensaje que ya usa `change_status` al activar sin reglas ("Una promoción necesita al
+menos una regla"). Ningún otro camino cambia: `PATCH /promotions/{id}/shape` sigue exigiendo
+`min_length=1` (siempre reemplaza la lista completa) y `change_status` a `active` sigue validando
+que haya al menos una regla con al menos una variante.
+
+**Por qué cambia**: la pantalla de creación rediseñada (spec 083, US3) ahora guarda la promoción en
+`Borrador` en el momento en que el administrador presiona "Continuar" (nombre + tipo elegidos), antes
+de llegar a la pantalla donde se configuran las reglas de precio — así el trabajo en curso no se
+pierde si el administrador abandona el flujo a mitad de camino. Bajo el contrato anterior
+(`min_length=1` incondicional, spec 063 FR-001) esa creación temprana era imposible.
+
+**Quién tomó la decisión y cuándo**: propietario / desarrollador del proyecto, 2026-09-16, sesión de
+clarificación post-primera-ronda de pruebas de spec 083 (`specs/083-presentaciones-y-promociones/spec.md`
+§Clarifications, pregunta "Continuar" → crear en Borrador).
+
+**Funcionalidades afectadas**: en `pos-backend`, `promotions/schemas.py::PromotionCreate` y
+`promotions/service.py::create` (sin cambios propios: `_add_rules`/`_guard_no_shared_variants_within_payload`/
+`_guard_variant_overlap` ya toleran una lista vacía sin necesitar ajuste). El characterization test
+`test_promotions_rules_admin.py::test_fr001_promocion_sin_reglas_rechazada` (FR-001) se actualiza:
+ya no espera una excepción al crear en `draft` sin reglas, y se agrega un caso nuevo que confirma que
+`status=active` sin reglas sigue rechazado. En `pos-heladeria`, `continueToConfigure()` pasa a llamar
+`POST /promotions` de inmediato.
+
+**Clasificación**: DECISIÓN DE NEGOCIO.
+
+**Tratamiento acordado**: esta entrada `A-75` debe existir **antes** de mergear el commit que relaja
+`PromotionCreate.rules` y el que actualiza `test_fr001_promocion_sin_reglas_rechazada` — ambos la
+citan. **No retroactivo** (Principio VII): sin cambio de esquema, sin migración de datos; las
+promociones ya creadas con reglas no se ven afectadas. Revertir el commit de `schemas.py` restaura
+la validación anterior (`min_length=1` incondicional).
+
+---
+
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
 
 La entrada #1 de `memoria-historica.md` (2026-07-17, commit `8777acbc`) documenta que
