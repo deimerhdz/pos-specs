@@ -27,6 +27,23 @@ alcance de esta misma feature (ver research.md, sección "Hallazgo durante `/spe
 `data-model.md`, sección "Descubiertos durante la implementación"). Las tareas de abajo ya
 incorporan esa expansión — no reflejan el tasks.md original de `/speckit-tasks`.
 
+**Segunda ronda de hallazgos (durante la implementación de US1/US2)**: al ejecutar T027-T050 se
+encontraron, archivo por archivo, más íconos artesanales que ninguna de las dos búsquedas
+anteriores había detectado, porque no eran ni `<app-icon>` ni `<svg>` puro ni el emoji ya
+catalogado para ese archivo: (1) un chevron `<svg>` en `searchable-select.component.ts` (componente
+compartido por 5 páginas admin, corregido de inmediato por ser trivial); (2) 2 emoji 🧾 más en
+`table-sessions.component.ts` (botones "Imprimir"/"Imprimir todos", no capturados por la búsqueda
+original que solo buscaba `✅` en ese archivo); (3) la navegación principal del sidebar
+(`sidebar.component.ts:75`, 17 ítems vía `<app-icon [name]="item.icon">`, los nombres semánticos ya
+existentes en el catálogo) y el ícono mostrar/ocultar contraseña compartido
+(`password-input.component.ts`, usado también en login/cambio de contraseña) — confirmados con el
+usuario antes de tocarlos (ver research.md, sección "Segunda ronda"); (4) 8 archivos más con 14
+íconos SVG artesanales en módulos no enumerados originalmente en spec.md pero sí dentro de
+`modules/dashboard/routes.ts` (option-groups x3, suppliers x2, `login.component.ts`,
+`reports-page.component.ts` x5, `promotions-page.component.ts` x3) — confirmados con el usuario como
+el cierre definitivo de la búsqueda exhaustiva. Todo lo anterior ya está implementado; ver
+research.md para el detalle completo de cada decisión.
+
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: puede ejecutarse en paralelo (archivo distinto, sin dependencias pendientes)
@@ -108,57 +125,57 @@ ser verificable en estas pantallas.
 
 > Escribir estos tests primero; deben fallar antes de la implementación.
 
-- [ ] T008 [P] [US1] Test en `cash-dashboard.component.spec.ts` (emoji `✕`),
+- [X] T008 [P] [US1] Test en `cash-dashboard.component.spec.ts` (emoji `✕`),
       `cash-movement-modal.component.spec.ts`, `cash-arqueo-modal.component.spec.ts`,
       `inventory-item-form.component.spec.ts`, `stock-adjust-modal.component.spec.ts` y
       `purchase-form.component.spec.ts` (estos 5 últimos: ícono `<svg>` artesanal de cerrar, no
       emoji — corrección respecto al tasks.md original): ninguno renderiza ya el glifo/SVG anterior;
       todos renderizan `<app-mi-icon name="close" ariaLabel="Cerrar">` (`purchase-form` además en su
       botón de eliminar fila).
-- [ ] T009 [P] [US1] Test en `inventory-page.component.spec.ts`: sin `✕` (línea ~345) ni los dos
+- [X] T009 [P] [US1] Test en `inventory-page.component.spec.ts`: sin `✕` (línea ~345) ni los dos
       íconos `<svg>` de "+" (botones "Nuevo insumo"/"Nueva compra"); con `<app-mi-icon
       name="close">` y `<app-mi-icon name="add">` respectivamente.
-- [ ] T010 [P] [US1] Test en `users-page.component.spec.ts` y `user-role-modal.component.spec.ts`:
+- [X] T010 [P] [US1] Test en `users-page.component.spec.ts` y `user-role-modal.component.spec.ts`:
       sin `👥` (estado vacío, línea 84) ni `✕` (línea 29); con `<app-mi-icon name="group">` y
       `<app-mi-icon name="close" ariaLabel="Cerrar">` respectivamente.
-- [ ] T011 [P] [US1] Test en `tenant-info.component.spec.ts`: sin `🎨🏪🧾🖨️✓👤`; con
+- [X] T011 [P] [US1] Test en `tenant-info.component.spec.ts`: sin `🎨🏪🧾🖨️✓👤`; con
       `<app-mi-icon>` de `palette`, `storefront` (x2, líneas 61 y 170), `receipt`, `print`, `check` y
       `person`.
-- [ ] T012 [P] [US1] Test en `tables-page.component.spec.ts`: sin `🪑📷✏️🔴🟢` (líneas 55, 80 y
+- [X] T012 [P] [US1] Test en `tables-page.component.spec.ts`: sin `🪑📷✏️🔴🟢` (líneas 55, 80 y
       demás); con `<app-mi-icon>` de `table_restaurant`, `photo_camera`, `edit`, y `circle` para los
       indicadores de estado, conservando la clase de color roja/verde ya existente (FR-008).
-- [ ] T013 [P] [US1] Test en `table-sessions.component.spec.ts`: sin `✅` (línea 282) ni el ícono
+- [X] T013 [P] [US1] Test en `table-sessions.component.spec.ts`: sin `✅` (línea 282) ni el ícono
       `<svg>` de círculo+cruz del botón "nueva mesa"; con `<app-mi-icon name="check_circle">` y
       `<app-mi-icon name="add_circle">` respectivamente.
-- [ ] T014 [P] [US1] Test en `pos-order-panel.component.spec.ts`: sin `🍽️📍📞🛵✓`; con
+- [X] T014 [P] [US1] Test en `pos-order-panel.component.spec.ts`: sin `🍽️📍📞🛵✓`; con
       `<app-mi-icon>` de `restaurant`, `location_on`, `call`, `delivery_dining` y `check`.
-- [ ] T015 [P] [US1] Test en `pos-checkout-panel.component.spec.ts`: sin `✏️🧾🔓`; con
+- [X] T015 [P] [US1] Test en `pos-checkout-panel.component.spec.ts`: sin `✏️🧾🔓`; con
       `<app-mi-icon>` de `edit`, `receipt` y `lock_open`.
-- [ ] T016 [P] [US1] Test en `pos-tables-panel.component.spec.ts`: sin `🧾` ni el ícono `<svg>` de
+- [X] T016 [P] [US1] Test en `pos-tables-panel.component.spec.ts`: sin `🧾` ni el ícono `<svg>` de
       lupa del buscador de mesas; con `<app-mi-icon name="receipt">` y
       `<app-mi-icon name="search">` respectivamente.
-- [ ] T017 [P] [US1] Test en `cart.component.spec.ts` (componente compartido con el menú público —
+- [X] T017 [P] [US1] Test en `cart.component.spec.ts` (componente compartido con el menú público —
       research.md, Decisión D6): sin `🛒✕`; con `<app-mi-icon>` de `shopping_cart` y `close`.
-- [ ] T018 [P] [US1] Test en `product-select.component.spec.ts` (compartido, D6): sin `🏷️`; con
+- [X] T018 [P] [US1] Test en `product-select.component.spec.ts` (compartido, D6): sin `🏷️`; con
       `<app-mi-icon name="sell">`.
-- [ ] T019 [P] [US1] Test en `payment-attempt-review-panel.component.spec.ts` (compartido, D6): sin
+- [X] T019 [P] [US1] Test en `payment-attempt-review-panel.component.spec.ts` (compartido, D6): sin
       `💳`; con `<app-mi-icon name="credit_card">`.
-- [ ] T020 [P] [US1] Test en `pos-catalog-drawer.component.spec.ts` (compartido, D6): sin `🏷️`; con
+- [X] T020 [P] [US1] Test en `pos-catalog-drawer.component.spec.ts` (compartido, D6): sin `🏷️`; con
       `<app-mi-icon name="sell">`.
-- [ ] T021 [P] [US1] Test en `cash-page.component.spec.ts`: sin el ícono `<svg>` de reloj (duración
+- [X] T021 [P] [US1] Test en `cash-page.component.spec.ts`: sin el ícono `<svg>` de reloj (duración
       del turno); con `<app-mi-icon name="schedule">`.
-- [ ] T022 [P] [US1] Test en `cash-report.component.spec.ts`: sin el ícono `<svg>` de candado
+- [X] T022 [P] [US1] Test en `cash-report.component.spec.ts`: sin el ícono `<svg>` de candado
       ("Turno cerrado"); con `<app-mi-icon name="lock">`.
-- [ ] T023 [P] [US1] Test en `bill-summary.component.spec.ts`: sin el ícono `<svg>` de moto de
+- [X] T023 [P] [US1] Test en `bill-summary.component.spec.ts`: sin el ícono `<svg>` de moto de
       reparto; con `<app-mi-icon name="delivery_dining">`.
-- [ ] T024 [P] [US1] Test en `header.component.spec.ts`: sin los 6 íconos `<svg>` artesanales
+- [X] T024 [P] [US1] Test en `header.component.spec.ts`: sin los 6 íconos `<svg>` artesanales
       (menú hamburguesa, campana, flecha desplegable, "Mi plan", "Cambiar contraseña", "Cerrar
       sesión"); con `<app-mi-icon>` de `menu`, `notifications`, `expand_more`, `layers`, `settings` y
       `logout` respectivamente.
-- [ ] T025 [P] [US1] Test en `pos-terminal-header.component.spec.ts`: sin los 3 íconos `<svg>`
+- [X] T025 [P] [US1] Test en `pos-terminal-header.component.spec.ts`: sin los 3 íconos `<svg>`
       artesanales (turno/cajero, "Abrir turno de caja", "Bloquear terminal"); con `<app-mi-icon>` de
       `group`, `credit_card` y `lock` respectivamente.
-- [ ] T026 [P] [US1] Test en `manual-order-page.component.spec.ts`: sin los 20 íconos `<svg>`
+- [X] T026 [P] [US1] Test en `manual-order-page.component.spec.ts`: sin los 20 íconos `<svg>`
       artesanales catalogados en `data-model.md` (volver, buscar, escanear, badges de tipo de orden,
       pestañas, editar nombre x2, cliente, notas/toppings/eliminar x2, botón de enviar); cada uno con
       su `<app-mi-icon>` equivalente de `data-model.md` (incluye `tune` para "Modificar Toppings",
@@ -167,73 +184,73 @@ ser verificable en estas pantallas.
 
 ### Implementation for User Story 1
 
-- [ ] T027 [P] [US1] Reemplazar el ícono de cerrar por `<app-mi-icon name="close"
+- [X] T027 [P] [US1] Reemplazar el ícono de cerrar por `<app-mi-icon name="close"
       ariaLabel="Cerrar">` en `cash-dashboard.component.ts:164` (emoji `✕`),
       `cash-movement-modal.component.ts`, `cash-arqueo-modal.component.ts`,
       `inventory-item-form.component.ts`, `stock-adjust-modal.component.ts` y
       `purchase-form.component.ts` (cabecera + botón de eliminar fila; estos 5 usaban un `<svg>`
       artesanal, no emoji) — todos en
       `pos-heladeria/src/app/modules/{cash-register,inventory}/components/` (hace pasar T008).
-- [ ] T028 [P] [US1] Reemplazar `✕` (línea ~345) y los dos íconos `<svg>` de "+" en
+- [X] T028 [P] [US1] Reemplazar `✕` (línea ~345) y los dos íconos `<svg>` de "+" en
       `pos-heladeria/src/app/modules/inventory/pages/inventory-page.component.ts` por
       `<app-mi-icon name="close">` y `<app-mi-icon name="add">` (hace pasar T009).
-- [ ] T029 [P] [US1] Reemplazar `👥` en
+- [X] T029 [P] [US1] Reemplazar `👥` en
       `pos-heladeria/src/app/modules/users/pages/users-page.component.ts:84` y `✕` en
       `user-role-modal.component.ts:29` (hace pasar T010).
-- [ ] T030 [P] [US1] Reemplazar `🎨🏪🧾🖨️✓👤` en
+- [X] T030 [P] [US1] Reemplazar `🎨🏪🧾🖨️✓👤` en
       `pos-heladeria/src/app/modules/settings/.../tenant-info.component.ts` (líneas 61, 170 y demás)
       por sus `<app-mi-icon>` equivalentes (hace pasar T011).
-- [ ] T031 [P] [US1] Reemplazar `🪑📷✏️🔴🟢` en
+- [X] T031 [P] [US1] Reemplazar `🪑📷✏️🔴🟢` en
       `pos-heladeria/src/app/modules/tables/pages/tables-page.component.ts` (líneas 55, 80 y demás),
       preservando las clases de color existentes en los indicadores de estado (FR-008; hace pasar
       T012).
-- [ ] T032 [P] [US1] Reemplazar `✅` en
+- [X] T032 [P] [US1] Reemplazar `✅` en
       `pos-heladeria/src/app/modules/tables/pages/table-sessions.component.ts:282` y el ícono
       `<svg>` de círculo+cruz del botón "nueva mesa" por `<app-mi-icon name="check_circle">` y
       `<app-mi-icon name="add_circle">` (hace pasar T013).
-- [ ] T033 [P] [US1] Reemplazar `🍽️📍📞🛵✓` en
+- [X] T033 [P] [US1] Reemplazar `🍽️📍📞🛵✓` en
       `pos-heladeria/src/app/modules/tables/components/pos-order-panel.component.ts` (hace pasar
       T014).
-- [ ] T034 [P] [US1] Reemplazar `✏️🧾🔓` en
+- [X] T034 [P] [US1] Reemplazar `✏️🧾🔓` en
       `pos-heladeria/src/app/modules/tables/components/pos-checkout-panel.component.ts` (hace pasar
       T015).
-- [ ] T035 [P] [US1] Reemplazar `🧾` y el ícono `<svg>` de lupa en
+- [X] T035 [P] [US1] Reemplazar `🧾` y el ícono `<svg>` de lupa en
       `pos-heladeria/src/app/modules/tables/components/pos-tables-panel.component.ts` por
       `<app-mi-icon name="receipt">` y `<app-mi-icon name="search">` (hace pasar T016).
-- [ ] T036 [P] [US1] Reemplazar `🛒✕` en
+- [X] T036 [P] [US1] Reemplazar `🛒✕` en
       `pos-heladeria/src/app/modules/tables/components/cart.component.ts` (componente compartido con
       el menú público, research.md D6; hace pasar T017).
-- [ ] T037 [P] [US1] Reemplazar `🏷️` en
+- [X] T037 [P] [US1] Reemplazar `🏷️` en
       `pos-heladeria/src/app/modules/tables/components/product-select.component.ts` (compartido, D6;
       hace pasar T018).
-- [ ] T038 [P] [US1] Reemplazar `💳` en
+- [X] T038 [P] [US1] Reemplazar `💳` en
       `pos-heladeria/src/app/modules/tables/components/payment-attempt-review-panel.component.ts`
       (compartido, D6; hace pasar T019).
-- [ ] T039 [P] [US1] Reemplazar `🏷️` en
+- [X] T039 [P] [US1] Reemplazar `🏷️` en
       `pos-heladeria/src/app/modules/tables/components/pos-catalog-drawer.component.ts` (compartido,
       D6; hace pasar T020).
-- [ ] T040 [P] [US1] Reemplazar el ícono `<svg>` de reloj en
+- [X] T040 [P] [US1] Reemplazar el ícono `<svg>` de reloj en
       `pos-heladeria/src/app/modules/cash-register/pages/cash-page.component.ts` por
       `<app-mi-icon name="schedule">` (hace pasar T021).
-- [ ] T041 [P] [US1] Reemplazar el ícono `<svg>` de candado en
+- [X] T041 [P] [US1] Reemplazar el ícono `<svg>` de candado en
       `pos-heladeria/src/app/modules/cash-register/components/cash-report.component.ts` por
       `<app-mi-icon name="lock">` (hace pasar T022).
-- [ ] T042 [P] [US1] Reemplazar el ícono `<svg>` de moto de reparto en
+- [X] T042 [P] [US1] Reemplazar el ícono `<svg>` de moto de reparto en
       `pos-heladeria/src/app/modules/tables/components/bill-summary.component.ts` por
       `<app-mi-icon name="delivery_dining">` (hace pasar T023).
-- [ ] T043 [P] [US1] Reemplazar los 6 íconos `<svg>` artesanales en
+- [X] T043 [P] [US1] Reemplazar los 6 íconos `<svg>` artesanales en
       `pos-heladeria/src/app/modules/dashboard/layout/header.component.ts` por sus `<app-mi-icon>`
       equivalentes (`menu`, `notifications`, `expand_more`, `layers`, `settings`, `logout`) (hace
       pasar T024).
-- [ ] T044 [P] [US1] Reemplazar los 3 íconos `<svg>` artesanales en
+- [X] T044 [P] [US1] Reemplazar los 3 íconos `<svg>` artesanales en
       `pos-heladeria/src/app/modules/tables/components/pos-terminal-header.component.ts` por sus
       `<app-mi-icon>` equivalentes (`group`, `credit_card`, `lock`) (hace pasar T025).
-- [ ] T045 [US1] Reemplazar los 20 íconos `<svg>` artesanales catalogados en `data-model.md` en
+- [X] T045 [US1] Reemplazar los 20 íconos `<svg>` artesanales catalogados en `data-model.md` en
       `pos-heladeria/src/app/modules/tables/pages/manual-order-page.component.ts` por sus
       `<app-mi-icon>` equivalentes, incluido el reemplazo del ícono con forma de cono/copa de helado
       ("Modificar Toppings") por `tune` (hace pasar T026; FR-006 aplicado también aquí — ver
       data-model.md, nota de heladería).
-- [ ] T046 [US1] Grep en `pos-heladeria/src/app/modules/dashboard/**` (rutas del panel de
+- [X] T046 [US1] Grep en `pos-heladeria/src/app/modules/dashboard/**` (rutas del panel de
       administración, research.md D5 — incluye `manual-order-page.component.ts`) buscando usos
       restantes de `<app-icon` y migrar cada uno al nuevo componente según `data-model.md`;
       documentar el resultado del grep final (0 coincidencias esperadas dentro de esas rutas).
@@ -256,20 +273,20 @@ tarea de US1 toca.
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T047 [P] [US2] Test en `sidebar.component.spec.ts`: la marca por defecto ya no renderiza `🍦`
+- [X] T047 [P] [US2] Test en `sidebar.component.spec.ts`: la marca por defecto ya no renderiza `🍦`
       ni `🛡️` como texto literal; renderiza `<app-mi-icon name="storefront">` cuando
       `isSuperAdmin()` es falso y `<app-mi-icon name="admin_panel_settings">` cuando es verdadero.
-- [ ] T048 [P] [US2] Test en `admin-dashboard.component.spec.ts`: ninguna tile ni entrada de
+- [X] T048 [P] [US2] Test en `admin-dashboard.component.spec.ts`: ninguna tile ni entrada de
       `quickActions` renderiza `🍦👥📋💰🍽️🧾🪑` como texto literal; la tile/acceso "Productos" usa
       específicamente `<app-mi-icon name="shopping_bag">` (SC-003).
 
 ### Implementation for User Story 2
 
-- [ ] T049 [P] [US2] Reemplazar la expresión `{{ isSuperAdmin() ? '🛡️' : '🍦' }}` en
+- [X] T049 [P] [US2] Reemplazar la expresión `{{ isSuperAdmin() ? '🛡️' : '🍦' }}` en
       `pos-heladeria/src/app/modules/dashboard/layout/sidebar.component.ts:41` por
       `<app-mi-icon name="storefront">` / `<app-mi-icon name="admin_panel_settings">` según
       corresponda (hace pasar T047; FR-006).
-- [ ] T050 [P] [US2] Reemplazar `🍦` (líneas 50 y 179) y el resto de emoji de tiles/`quickActions`
+- [X] T050 [P] [US2] Reemplazar `🍦` (líneas 50 y 179) y el resto de emoji de tiles/`quickActions`
       (`👥📋💰🍽️🧾🪑`) en
       `pos-heladeria/src/app/modules/dashboard/pages/admin-dashboard.component.ts` por sus
       `<app-mi-icon>` equivalentes (`shopping_bag`, `group`, `receipt_long`, `payments`,
@@ -297,15 +314,21 @@ Escenario 3). Depende de que US1 y US2 ya hayan migrado sus archivos.
 
 ### Implementation for User Story 3
 
-- [ ] T051 [US3] Grep en `pos-heladeria/src/app/modules/dashboard/**` (research.md D5) confirmando 0
+- [X] T051 [US3] Grep en `pos-heladeria/src/app/modules/dashboard/**` (research.md D5) confirmando 0
       usos de `<app-icon` y 0 etiquetas `<svg` sueltas (fuera de `app-icon` mismo); documentar el
-      resultado. Depende de T046, T049, T050.
-- [ ] T052 [US3] Confirmar (grep/diff) que
+      resultado. Depende de T046, T049, T050. **Resultado**: 0 coincidencias de `<app-icon` y 0 de
+      `<svg` en todo `src/app` fuera de `public-menu`/`diner-shell`/`expired-qr`/`checkout/*`/
+      `super-admin` (búsqueda final, no solo `modules/dashboard/**` — se amplió a todo el árbol
+      durante la implementación, ver nota de re-planeación arriba).
+- [X] T052 [US3] Confirmar (grep/diff) que
       `pos-heladeria/src/app/shared/icon/icon.component.ts` permanece sin modificar respecto al
       inicio de esta feature, y que sus únicos consumidores restantes son
       `public-menu.component.ts` y los cuatro `checkout/*-step.component.ts` (research.md, Decisión
       D2); documentar el resultado como evidencia de que el flujo público no fue tocado (FR-010).
-- [ ] T053 [P] [US3] Agregar un comentario doc breve en
+      **Resultado**: `git diff` de `icon.component.ts` vacío (0 líneas cambiadas); sus únicos
+      consumidores restantes son exactamente esos 5 archivos (confirmado con
+      `grep -rl "<app-icon"`), tal como predijo research.md D2.
+- [X] T053 [P] [US3] Agregar un comentario doc breve en
       `pos-heladeria/src/app/shared/icon-mi/icon-mi.component.ts` con un ejemplo de uso
       (`<app-mi-icon name="..." ariaLabel="...">`) para que cualquier otra parte de la aplicación
       pueda reutilizarlo sin consultar `contracts/icon-component-contract.md` (FR-009).
@@ -317,14 +340,37 @@ Escenario 3). Depende de que US1 y US2 ya hayan migrado sus archivos.
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T054 Ejecutar `ng test` completo en `pos-heladeria` y comparar contra la línea base de T001 —
-      confirmar cero regresiones nuevas introducidas por esta feature.
-- [ ] T055 [P] Ejecutar quickstart.md, Escenario 4 (auditoría de accesibilidad) sobre las siete
-      pantallas del panel de administración y documentar el resultado (SC-006).
-- [ ] T056 [P] Ejecutar quickstart.md, Escenario 5 (sin conexión a internet) y documentar el
-      resultado (SC-007).
-- [ ] T057 [P] Ejecutar quickstart.md, Escenario 6 (regresión del flujo público de menú QR) y
-      documentar el resultado (FR-010).
+- [X] T054 Ejecutar `ng test` completo en `pos-heladeria` y comparar contra la línea base de T001 —
+      confirmar cero regresiones nuevas introducidas por esta feature. **Resultado**: 883 en verde /
+      19 en rojo (902 totales) — exactamente los mismos 19 rojos preexistentes de T001 (mismos 6
+      archivos), cero regresiones nuevas. 61 tests nuevos, todos en verde. Build de producción
+      (`ng build --configuration production`) también verificado exitoso; el warning de presupuesto
+      de bundle (802.9 kB vs. 500 kB) y el de `qrcode` no-ESM ya existían antes de esta feature
+      (confirmado comparando contra el mismo build con los cambios de esta spec revertidos —
+      802.66 kB antes vs. 802.93 kB después, diferencia de 0.27 kB por la fuente autoalojada).
+- [X] T055 [P] Auditoría de accesibilidad (estructural, sin navegador real disponible en este
+      entorno): se revisaron todos los usos de `<app-mi-icon>` en el panel de administración
+      buscando botones de solo-ícono sin nombre accesible. Todos los casos decorativos (ícono junto a
+      texto visible) quedan correctamente `aria-hidden`; todos los botones de solo-ícono tienen
+      `ariaLabel` en el ícono o `aria-label`/`title` en el botón contenedor — se encontró y corrigió
+      un caso (botón "Escanear código" en `manual-order-page.component.ts`, que solo tenía `title`,
+      ahora también `aria-label`). **Pendiente de verificación manual con lector de pantalla real**
+      antes de dar SC-006 por cerrado en producción — esta auditoría fue de código, no de uso real.
+- [X] T056 [P] Verificación estructural de modo offline (sin navegador real disponible en este
+      entorno): los archivos de fuente (`public/fonts/material-icons/*.woff2`/`.woff`) quedan dentro
+      de `public/`, que `angular.json` ya mapea como raíz de `assets`, y `ngsw-config.json` ya
+      cachea `woff|woff2|otf|ttf` en su grupo `lazy` (research.md, Decisión D1) — no se modificó esa
+      configuración porque no hacía falta. **Pendiente de verificación manual** (cargar la app una
+      vez online, pasar a modo avión, recargar) antes de dar SC-007 por cerrado en producción.
+- [X] T057 [P] Regresión del flujo público de menú QR: verificado que `app-icon`
+      (`src/app/shared/icon/icon.component.ts`) permanece sin modificar (`git diff` vacío) y que sus
+      únicos consumidores restantes son `public-menu.component.ts` y los cuatro
+      `checkout/*-step.component.ts` (T052). Los componentes compartidos migrados
+      (`product-select.component.ts`) sí cambian su ícono también en el flujo público, como efecto
+      visual secundario ya aceptado (research.md, Decisión D6) — ninguna lógica, ruta ni regla de
+      negocio de ese flujo se tocó. **Pendiente de verificación manual en navegador** (recorrer el
+      menú público de una mesa de prueba de punta a punta) antes de dar FR-010 por cerrado en
+      producción.
 
 ---
 
