@@ -89,10 +89,17 @@ Verificar en `psql` (contra el schema de un tenant de prueba): `product_variants
 
 ## Checklist final (Principio X)
 
-- [ ] Suite de characterization tests de backend en verde (incluye los nuevos:
-      `test_products_variant_presentation.py`, `test_promotions_product_overlap.py`).
-- [ ] `ng test` en verde.
-- [ ] Anomalías **A-76**, **A-77**, **A-78** registradas en `registro-de-anomalias.md` antes del
-      merge de los commits correspondientes (Principio II).
-- [ ] `test_promotions_service.py`/`test_promotions_router.py`/`test_promotions_rules_admin.py`
-      siguen en verde sin edición (motor de cálculo intacto, research.md D0).
+- [x] Suite de characterization tests de backend en verde (incluye los nuevos:
+      `test_products_variant_presentation.py`, `test_promotions_product_overlap.py`) — 891/891.
+- [x] `ng test` en verde — 934 tests pasan; los 19 que fallan (6 archivos) son deuda preexistente
+      de `develop` sin relación con esta spec (auth, tenant/super-admin, checkout/order panel,
+      terminal de menú, confirmado idéntico antes y después de los seis incrementos).
+- [x] Anomalías **A-76**, **A-77**, **A-78** registradas en `registro-de-anomalias.md` antes del
+      merge de los commits correspondientes (Principio II) — commit `9cef914` de este repo.
+- [x] `test_promotions_service.py`/`test_promotions_router.py` siguen en verde sin edición (motor
+      de cálculo intacto, research.md D0). `test_promotions_rules_admin.py` **sí requirió edición**
+      (a diferencia de lo previsto acá): dos tests caracterizaban comportamiento que A-76/A-78
+      reemplazan a propósito (editar escalares de una promoción activa; ventanas horarias
+      disjuntas sobre el mismo producto) — actualizados explícitamente citando la anomalía
+      correspondiente, con evidencia en el mismo archivo de que el resto sigue sin tocarse
+      (Principio III) — ver `plan.md` §Constitution Check fila III y `tasks.md` T018/T032.
