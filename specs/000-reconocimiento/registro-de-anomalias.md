@@ -2341,6 +2341,120 @@ la validación anterior (`min_length=1` incondicional).
 
 ---
 
+### A-76 — [DECISIÓN DE NEGOCIO — spec 084] `PATCH /promotions/{id}` rechaza editar una promoción `Activa`
+
+**Qué cambia**: `service.update()` (`app/api/v1/promotions/service.py:762-778`, respalda
+`PATCH /promotions/{promotion_id}`, `router.py:81`) gana una guarda al inicio:
+`if promo.status == "active": raise HTTPException(409, ...)`. Hoy esa función edita
+`name`/`description`/`ends_at`/`days_of_week`/`start_time`/`end_time` de una promoción sin
+ninguna restricción de estado — incluida una promoción `Activa`, la que en este momento se le
+está cobrando a los clientes. Con este cambio, solo `Borrador`, `Pausada` y `Finalizada` siguen
+editables por esta vía. En el frontend (`pos-heladeria`), el botón "Configurar" del listado
+(`promotions-page.component.ts`) queda deshabilitado cuando `status === 'active'`, con el mismo
+criterio de estado real (no el badge visual) que ya usa `canDelete()`.
+
+**Por qué cambia**: bug reportado en producción — el administrador podía abrir "Configurar" sobre
+una promoción `Activa` y editar su nombre, fecha de fin, días u horas mientras esa promoción
+seguía cobrando a los clientes en ese momento, un riesgo de negocio (spec 083 FR-018 ya bloqueaba
+editar tipo/valor/unidades mínimas/conjunto de variantes de las reglas en `Activa`, pero dejaba
+esos otros campos abiertos deliberadamente). El propietario del producto decidió que, para poder
+modificar cualquier campo de una promoción `Activa`, primero hay que pausarla desde el listado.
+
+**Quién tomó la decisión y cuándo**: propietario del producto, 2026-09-17, en
+`specs/084-fix-promociones-productos/spec.md` §Clarifications (pregunta sobre el bug 4, "bloqueo
+total del botón Configurar").
+
+**Funcionalidades afectadas**: en `pos-backend`, `promotions/service.py::update` (guarda nueva) y
+los characterization tests `test_ca1_editar_escalares_de_una_activa` y
+`test_editar_vigencia_de_promocion_multi_regla_afecta_a_todas_con_una_accion`
+(`test_promotions_rules_admin.py`), que hoy llaman `service.update()` sobre una promoción `active`
+y esperan éxito — se actualizan para esperar `HTTPException` 409, citando esta entrada. En
+`pos-heladeria`, `promotions-page.component.ts` (botón "Configurar" y guarda en `openEdit()`).
+Ninguna promoción ya guardada se modifica — el cambio es de validación hacia adelante.
+
+**Clasificación**: DECISIÓN DE NEGOCIO.
+
+**Tratamiento acordado**: `specs/084-fix-promociones-productos/tasks.md`. Esta entrada `A-76` debe
+existir **antes** de mergear el commit que agrega la guarda en `service.py` y el que actualiza los
+dos tests de `test_promotions_rules_admin.py` — ambos la citan. **No retroactivo** (Principio VII):
+sin cambio de esquema, sin migración de datos. Revertir el commit de `service.py` restaura por
+completo el comportamiento anterior (editable en cualquier estado).
+
+---
+
+### A-77 — [DECISIÓN DE NEGOCIO — spec 084] Aplicar una regla a varios productos ya seleccionados genera una fila independiente por producto, no una regla combinada
+
+**Qué cambia**: `addRuleRow()`/`resolvedVariantIdsForLabel` (`promotions-page.component.ts`, spec
+083/PR #83) genera hoy, cuando varios productos del Paso 1 comparten la presentación elegida en
+una regla, **una sola** `PromotionRuleForm` cuyo `variantIds` es la unión de las variantes de esos
+productos. Este cambio lo reemplaza por **N reglas independientes** — una por producto marcado en
+una lista de confirmación con casillas premarcadas (que el administrador puede desmarcar antes de
+confirmar) — cada una editable/eliminable por separado. Sin cambio de backend: `PromotionRule`/
+`PromotionVariant` ya soportan N reglas por promoción, cada una con su propia lista de variantes.
+
+**Por qué cambia**: la regla combinada actual no se puede editar ni eliminar por producto — cambiar
+el precio para uno solo de los productos cubiertos obliga a reconstruir toda la regla combinada.
+El propietario del producto pidió que definir la regla una vez siga aplicándola de una sola acción
+a todos los productos coincidentes, pero como filas independientes, con la posibilidad de excluir
+algún producto de esa aplicación antes de confirmar.
+
+**Quién tomó la decisión y cuándo**: propietario del producto, 2026-09-17, en
+`specs/084-fix-promociones-productos/spec.md` §Clarifications (preguntas sobre el bug 3, alcance de
+la aplicación masiva y mecánica de exclusión por casilla).
+
+**Funcionalidades afectadas**: en `pos-heladeria`, `promotions-page.component.ts`
+(`addRuleRow()`/`resolvedVariantIdsForLabel`, sin equivalente en characterization tests de backend
+porque es lógica de frontend). Ninguna promoción ya guardada con una regla combinada se modifica
+retroactivamente — el cambio afecta solo cómo se capturan reglas nuevas desde este momento.
+
+**Clasificación**: DECISIÓN DE NEGOCIO.
+
+**Tratamiento acordado**: `specs/084-fix-promociones-productos/tasks.md`. Esta entrada `A-77` debe
+existir **antes** de mergear el commit que refactoriza `addRuleRow()`. **No retroactivo** (Principio
+VII): sin cambio de esquema, sin migración de datos. Revertir el commit de
+`promotions-page.component.ts` restaura la regla combinada anterior.
+
+---
+
+### A-78 — [DECISIÓN DE NEGOCIO — spec 084] Un producto no puede quedar cubierto por dos promociones `Activa` a la vez
+
+**Qué cambia**: nueva guarda `_guard_product_overlap` en `app/api/v1/promotions/service.py`, junto
+a `_guard_variant_overlap` (spec 063 FR-014, sin cambio), invocada desde `create()` y
+`update_shape()`. Compara el `product_id` de cada variante de la promoción en curso contra las de
+**otras** promociones con `status="active"` (sin evaluar cruce de vigencia por fecha/hora, a
+diferencia de `_guard_variant_overlap`) y rechaza con 409 si algún producto ya está cubierto —
+a nivel de **producto completo**, sin importar si la variante que se quiere usar es la misma u
+otra distinta a la ya comprometida. Dentro de la **misma** promoción, seleccionar varias variantes
+del mismo producto sigue permitido sin cambio. En el frontend, el Paso 1 excluye/deshabilita los
+productos ya cubiertos por otra promoción activa, indicando cuál.
+
+**Por qué cambia**: sin esta restricción, un mismo producto podía anunciar y cobrar condiciones
+distintas según cuál de dos promociones activas "ganara" en un momento dado — ninguna guarda
+existente (ni spec 063 FR-014, por variante, ni spec 083) lo evitaba a nivel de producto completo.
+El propietario del producto introdujo esta regla al resolver el bug 3 (aplicación masiva de una
+regla), como condición necesaria para que "precio mínimo" en la tarjeta del menú QR (bug 1) tenga
+siempre un único tipo de descuento vigente por producto.
+
+**Quién tomó la decisión y cuándo**: propietario del producto, 2026-09-17, en
+`specs/084-fix-promociones-productos/spec.md` §Clarifications (preguntas sobre exclusividad de
+producto entre promociones vigentes y su granularidad).
+
+**Funcionalidades afectadas**: en `pos-backend`, `promotions/service.py` (guarda nueva) y el
+characterization test nuevo `test_promotions_product_overlap.py`. En `pos-heladeria`,
+`promotions-page.component.ts` (Paso 1) y el endpoint de productos que le indica qué candidatos
+están bloqueados. **No retroactivo** (FR-025 de spec.md): promociones ya `Activa` hoy que comparten
+un producto entre sí (posible bajo el criterio anterior, por variante) no se ven afectadas hasta
+que alguna se edite o se intente activar de nuevo.
+
+**Clasificación**: DECISIÓN DE NEGOCIO.
+
+**Tratamiento acordado**: `specs/084-fix-promociones-productos/tasks.md`. Esta entrada `A-78` debe
+existir **antes** de mergear el commit que agrega `_guard_product_overlap` y el que agrega
+`test_promotions_product_overlap.py` — ambos la citan. Revertir el commit de `service.py` restaura
+el criterio de exclusividad exclusivamente por variante (spec 063 FR-014).
+
+---
+
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
 
 La entrada #1 de `memoria-historica.md` (2026-07-17, commit `8777acbc`) documenta que
