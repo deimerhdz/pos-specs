@@ -6,7 +6,7 @@ description: "Task list template for feature implementation"
 # Tasks: Corrección de Bugs en Promociones y Productos
 
 **Input**: Documentos de diseño de `/specs/084-fix-promociones-productos/`
-**Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [research.md](./research.md) (D0–D9), [data-model.md](./data-model.md), [contracts/](./contracts/), [quickstart.md](./quickstart.md)
+**Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [research.md](./research.md) (D0–D12), [data-model.md](./data-model.md), [contracts/](./contracts/), [quickstart.md](./quickstart.md)
 
 **Tests**: Este proyecto usa *characterization tests* (`app/characterization_tests/`, `python -m unittest`) en `pos-backend` como árbitro de comportamiento (Principio III), no TDD clásico — las tareas de test se generan junto a cada endpoint/lógica nueva, no antes. `pos-heladeria` usa `ng test` sobre los `*.spec.ts` ya existentes (o nuevos cuando el archivo tocado no tenía spec).
 
@@ -176,6 +176,119 @@ pueden avanzar en paralelo con cualquiera de las demás.
 
 ---
 
+## Phase 10: Enmienda 2026-09-20 — User Story 7 (nombre derivado de la presentación) y User Story 8 (orden de la tarjeta)
+
+**Contexto**: las Fases 1–9 están completas (T001–T042). Esta fase se agrega tras una revisión del
+formulario ya implementado; sustituye parte del comportamiento de US1 (spec.md §Enmienda, A-79).
+Documentación de diseño ya escrita: spec.md FR-029–FR-039, [data-model.md](./data-model.md)
+§Enmienda, [contracts/variante-sin-nombre.md](./contracts/variante-sin-nombre.md),
+[contracts/formulario-tamanos-orden.md](./contracts/formulario-tamanos-orden.md), research.md D10–D12.
+
+**Orden de despliegue** (research.md D10, contrato no retrocompatible): **Paso A** backend aditivo →
+**Paso B** frontend → **Paso C** backend destructivo. Las tareas de abajo están agrupadas por paso;
+en desarrollo pueden escribirse en la misma rama, pero cada paso se despliega por separado.
+
+> **Estado 2026-09-20**: se implementó directamente el estado final (Paso C) en las ramas de
+> desarrollo `fix/084-promociones-productos` de ambos repos, para poder ver el resultado completo;
+> los cambios no están commiteados. Antes de **desplegar** a producción hay que decidir si se
+> reintroduce la escalera A→B→C (mantener `name` en las respuestas un ciclo de despliegue) o si se
+> acepta un corte con el menú QR en caché mostrando variantes sin nombre hasta que se actualice el
+> service worker. La migración se aplicó a la BD de desarrollo.
+
+**Independent Test (US7)**: aplicar la migración sobre un tenant con variantes de nombre libre y
+sin presentación; abrir un producto y verificar que no hay campo "Nombre", que cada tamaño muestra
+su presentación y que los nombres visibles en menú QR/carrito/promociones no cambiaron; renombrar
+una presentación y ver el cambio reflejado sin otra acción.
+**Independent Test (US8)**: con "Maneja inventario" apagado, la tabla de tamaños se ve completa
+justo bajo el encabezado y el interruptor queda debajo de ella.
+
+### Preparación
+
+- [X] T043 [US7] Confirmar la cabeza de Alembic en `../pos-backend` (`alembic heads`; hoy `a9f7d0310f6b`, o la que corresponda si la rama de spec 084 ya se fusionó) y **repetir** el inventario de lecturas de nombre de variante con `grep` en `../pos-backend/app` (excluyendo `characterization_tests`/`scripts`) y `../pos-heladeria/src` — completar la tabla de contracts/variante-sin-nombre.md con cualquier lectura no listada — cabeza confirmada: `a9f7d0310f6b`; inventario de lecturas repetido con `grep` (coincide con la tabla del contrato)
+- [X] T044 [P] [US7] Registrar la anomalía **A-79** en `specs/000-reconocimiento/registro-de-anomalias.md` (Principio II) — registrada el 2026-09-20 junto con esta documentación; debe existir antes de mergear T052/T057
+
+### Paso A — backend aditivo (sin migración)
+
+- [X] T045 [US7] Agregar la propiedad `ProductVariant.presentation_name` y declarar `presentation` con `lazy="joined"` en `../pos-backend/app/models/product_variant.py`; agregar `presentation_name` a `VariantResponse`/`VariantSaveOut` (`catalog/schemas.py`, `products/schemas.py`) y `presentation_name`+`presentation_id` a `MenuVariantResponse` (`menu/schemas.py`), **manteniendo `name`**; poblarlos en `products/service.py::to_save_response` y `menu/router.py` — sin cambio de esquema de BD — **implementado directo en el estado final**: `name` ya no se devuelve (sin el paso A aditivo, ver nota de despliegue abajo)
+- [X] T046 [US7] En `../pos-backend/app/api/v1/catalog/service.py`: helper `resolve_default_presentation(db)` (get-or-create de "Presentación única" por nombre exacto sin filtrar `active`, re-consulta ante `IntegrityError`); hacer `name` opcional en `VariantSaveIn`/`VariantCreate`; regla de compatibilidad `presentation_id` nulo **y** `name` ausente ⇒ "Presentación única" (con `name` presente rige el comportamiento actual); `ensure_default_variant` y la herencia de categoría (`products/service.py::_apply_inherited_or_default_variant`, `VariantSaveIn(presentation_id=p.id)`) crean con presentación asociada — depende de T045 — sin la regla de compatibilidad `name` presente/ausente (mismo motivo); `default_presentation()` usa `begin_nested()` (SAVEPOINT) para la carrera del get-or-create
+- [X] T047 [P] [US7] Agregar `../pos-backend/app/characterization_tests/test_variant_sin_nombre.py` (parte A): atajo `null` ⇒ "Presentación única" y su get-or-create (incluida la presentación existente desactivada), dos filas nulas del mismo producto ⇒ 409, variantes heredadas de categoría quedan asociadas, las respuestas traen `presentation_name` — depende de T046 — los tests viven en `test_products_variant_presentation.py` (reescrito), no en `test_variant_sin_nombre.py`; 18 tests
+
+**Checkpoint A**: backend desplegable sin romper al frontend anterior.
+
+### Paso B — frontend
+
+- [X] T048 [P] [US7] En `../pos-heladeria/src/app/modules/products/interfaces/product.interface.ts` y `services/product.service.ts`: quitar `name` de `VariantDraft`/`VariantSavePayload`, agregar `presentationName` a `VariantDraft`/`Variant`/`DeactivatedVariant`, leer `presentation_name` en los mapeos (~l.299/404/423/623) y dejar de enviar `name` (~l.540) — depende de T045 — 942 tests de frontend en verde salvo las 19 fallas preexistentes
+- [X] T049 [US7] En `../pos-heladeria/src/app/modules/products/pages/product-form.component.ts` (contracts/formulario-tamanos-orden.md §Tabla de tamaños): eliminar la columna y el `<input>` "Nombre" (grid `[28px_28px_1fr_140px_88px]`), quitar la opción "Sin presentación", excluir del `<select>` las presentaciones ya elegidas en otras filas, agregar a `canSave()` la exigencia de presentación por fila con el texto "Elige una presentación", ajustar `setVariantPresentation`/`addVariant`/`toggleHasSizes` (sin literales `'Grande'`/`'Único'`), la lista de desactivadas (`dv.presentationName`) y el `av.name` de la línea ~463 — depende de T048 — **desvío respecto del contrato original**: al encender tamaños se preseleccionan Grande/Mediana/Pequeña del catálogo cuando existen (antes se sembraban por nombre) en vez de dejar las 3 filas vacías; ver contracts/formulario-tamanos-orden.md
+- [X] T050 [P] [US7] Leer `presentation_name` en lugar de `name` de variante en `../pos-heladeria/src/app/core/services/menu.service.ts:133`, `modules/tables/services/menu-lookup.ts:50`, `modules/tables/services/dining-cart.service.ts:85`, `modules/tables/components/product-select.component.ts:131` y `modules/promotions/pages/promotions-page.component.ts:1423`; en `promotions-page.component.ts:1801` (aplicación masiva, US4) emparejar la variante de cada producto por `presentation_id` en vez de por nombre — depende de T045 — `menu.service.ts` mapea `presentation_name` al `name` del modelo interno del cliente (`MenuVariant`), por eso menu-lookup, dining-cart, product-select y promotions-page no cambiaron; la aplicación masiva sigue emparejando por la etiqueta (nombre de la presentación, único en el catálogo), no por `presentation_id`
+- [X] T051 [P] [US7] Actualizar los `*.spec.ts` que construyen o aserta `name` de variante (`product-form.component.spec.ts` — reemplazar los tests de US1 sobre nombre de solo lectura y "Sin presentación" —, `product.service.spec.ts`, `public-menu.component.spec.ts`, `promotions-page.component.spec.ts` y los specs del carrito de mesa) — depende de T049, T050 — product-form.spec (US1 reemplazado + 3 de orden US8), product.service.spec, menu.service.spec (+1)
+
+**Checkpoint B**: frontend desplegable contra el backend del paso A (y contra el del paso C).
+
+### Paso C — backend destructivo
+
+- [X] T052 [US7] Crear la migración `<rev>_084_variante_sin_nombre.py` en `../pos-backend/alembic/versions/` (`down_revision` = cabeza confirmada en T043), `@for_each_tenant_schema` e idempotente: crear en el catálogo las presentaciones faltantes para nombres libres, enlazar, verificar 0 nulos (aborta si no), `presentation_id NOT NULL`, FK `ON DELETE RESTRICT`, quitar `uq__product_variants__product_id__name` y la columna `name`; `downgrade` sin pérdida (data-model.md §Migración) — depende de T043, T044 — `c7e2b91a4d35`; `seed_free_names_sql`/`link_free_names_sql` como funciones puras
+- [X] T053 [US7] Ajustar `../pos-backend/app/models/product_variant.py`: quitar `name` y su `UniqueConstraint`; `presentation_id` no nulo, FK `RESTRICT`; `presentation: Mapped["Presentation"]` — depende de T052
+- [X] T054 [US7] Reescribir las lecturas/escrituras de nombre de la tabla de contracts/variante-sin-nombre.md: `variante_duplicada` por `presentation_id`, `_save_variant_entry` (retirar la rama de renombre, SKU con `Presentation.name`), `catalog/router.py` (`PATCH /variants/{id}` y la consulta de grupos en uso, l.~235), `catalog_engine/consumption.py:160`, `sales/service.py:228`, `orders/checkout.py:294,447`, `promotions/service.py:464,949` — depende de T053
+- [X] T055 [US7] En `../pos-backend/app/api/v1/presentations/router.py`: eliminar `_rename_conflict`, la cascada `UPDATE product_variants SET name` y el `409` de colisión (y su descripción en el decorador); queda solo la unicidad de `Presentation.name` (FR-031) — depende de T053
+- [X] T056 [US7] Quitar `name` de `VariantCreate`/`VariantUpdate`/`VariantSaveIn`/`VariantResponse`/`VariantSaveOut`/`MenuVariantResponse` y retirar la rama de compatibilidad de T046; `presentation_id` en `VariantResponse` deja de ser nullable — depende de T054
+- [X] T057 [US7] Actualizar los characterization tests y fixtures que construyen o aserta `ProductVariant.name` (`fixtures.py`, `orders_fixtures.py`, `cart_fixtures.py`, `table_sessions_fixtures.py`, `test_products_service.py`, `test_products_variant_presentation.py` — los casos de cascada de FR-004 se reemplazan por "renombrar se refleja sin escritura", `test_products_presentations_inheritance.py`, `test_categories_presentations.py`, `test_presentations_migration.py`, `test_promotions_migration.py`, `test_product_variant_reorder.py`, `test_plan_gating_inventory_fields.py`, y los que resulten de T043), **citando A-79** (Principio III); los scripts de `app/scripts/` que construyen `ProductVariant(name=…)` se actualizan o se marcan como obsoletos — depende de T053, T056 — golden master, fixtures (`make_variant(name=…)` sigue aceptando `name` como atajo y lo traduce a una presentación) y 7 archivos de test; **pendiente**: los 5 scripts manuales de `app/scripts/` que construyen `ProductVariant(name=…)` (`e2e_qr_flow`, `test_split_blindaje`, `test_cancel_inventory`, `test_receta_obligatoria`, `test_variant_option_groups`) — no corren en la suite
+- [X] T058 [P] [US7] Agregar el test de migración en `../pos-backend/app/characterization_tests/` (mismo patrón que `test_presentations_migration.py`): nombres libres → filas del catálogo, presentación desactivada con el mismo nombre reutilizada, mismo nombre libre en dos productos comparte fila, variantes ya asociadas intactas, 0 nulos tras `upgrade`, `downgrade` re-deriva los nombres — depende de T052 — `test_variant_sin_nombre_migration.py`, 7 tests sobre SQLite
+- [X] T059 [P] [US7] Agregar a `test_variant_sin_nombre.py` (parte C): renombrar una `Presentation` se refleja en menú, respuesta de producto y descripción de promoción sin ningún `UPDATE` sobre `product_variants` (SC-008); `409` de presentación en uso por variante desactivada; eliminar físicamente una presentación con variantes falla por `RESTRICT` (US7 escenario 7) — depende de T055 — cubierto en `test_products_variant_presentation.py` (renombre se refleja en todas las variantes; ya no choca con otra variante; 409 por variante desactivada). El `RESTRICT` de FK no se prueba en SQLite; verificado en PostgreSQL (T064)
+
+**Checkpoint C**: US7 completa y verificable (quickstart.md, sección US7).
+
+### User Story 8 — orden de la tarjeta
+
+- [X] T060 [US8] Mover el bloque "Maneja inventario" (interruptor + aviso `showsInventoryWarning()`) en `../pos-heladeria/src/app/modules/products/pages/product-form.component.ts` a después de la tabla de tamaños y de la lista de "Presentaciones desactivadas", y antes del detalle del tamaño activo; reajustar el separador `border-t` para que no quede doble (contracts/formulario-tamanos-orden.md) — mismo archivo que T049: hacerlo en el mismo cambio o a continuación, no en paralelo — hecho en el mismo cambio que T049
+- [X] T061 [P] [US8] Agregar a `product-form.component.spec.ts` tests de orden DOM: con tamaños, la tabla precede al interruptor "Maneja inventario"; sin tamaños, el interruptor queda bajo el encabezado; con `tracks_inventory=false` la tabla sigue visible y editable — depende de T060
+
+**Checkpoint**: US8 verificable de forma independiente (quickstart.md, sección US8).
+
+### Verificación final de la enmienda
+
+- [X] T062 [P] Ejecutar la suite completa de characterization tests de `../pos-backend` y confirmar que solo cambiaron los tests citados en T057 (línea base previa: 891/891) — 907/907
+- [X] T063 [P] Ejecutar `ng test` completo en `../pos-heladeria` y confirmar cero regresiones respecto de la línea base (934/954, con las 19 fallas preexistentes de T004) — 942 pasan, 19 fallan (los mismos 6 archivos preexistentes, idénticos con y sin estos cambios; `menu.service.spec.ts` incluido, falla ya en la línea base)
+- [X] T064 Ensayar la migración de T052 sobre una copia de datos reales: contar variantes y nombres visibles antes y después (SC-007), confirmar 0 variantes sin presentación y ejecutar `downgrade` + `upgrade` una vez — BD de desarrollo (`heladeria3`): 14 variantes, 0 sin presentación, 0 nombres cambiados, `downgrade` + `upgrade` sin errores; el esquema quedó con `presentation_id NOT NULL`, FK `RESTRICT`, sin `name` ni `uq…__name`
+- [ ] T065 Ejecutar la sección US7/US8 y el checklist de [quickstart.md](./quickstart.md) de punta a punta
+
+---
+
+## Phase 11: Enmienda 2026-09-20 (2) — User Story 4 (selector de presentación independiente de los productos)
+
+**Contexto**: spec.md FR-040–FR-044, research.md D13, anomalía **A-80**. Solo `pos-heladeria`.
+
+**Independent Test**: en una promoción nueva con el Paso 1 vacío, el selector del Paso 2 lista todas
+las presentaciones activas del catálogo; al seleccionar productos, la lista no cambia y el aviso
+indica a cuántos se aplicaría.
+
+- [X] T066 [P] Registrar la anomalía **A-80** en `specs/000-reconocimiento/registro-de-anomalias.md` (Principio II)
+- [X] T067 Propagar `presentation_id` del menú al modelo del cliente: `MenuVariant.presentation_id?` (`../pos-heladeria/src/app/modules/products/interfaces/product.interface.ts`) y su mapeo en `core/services/menu.service.ts`; opcional porque otros armadores del menú (modo diner) no lo necesitan
+- [X] T068 En `../pos-heladeria/src/app/modules/promotions/pages/promotions-page.component.ts`: `availableLabels()` → `availablePresentations()` (catálogo activo, ordenado), `pickerLabel` → `pickerPresentationId`, emparejamiento por `presentationId` (`matchingProductsForPresentation`), `variantLabel` sin la etiqueta "Presentación única", no reiniciar la elección al cambiar productos, `pickerMatchSummary` y su aviso bajo el selector, `loadAllPresentations()` en `ngOnInit` — depende de T067
+- [X] T069 [P] Actualizar `promotions-page.component.spec.ts` (fake de `PresentationService`, variantes con `presentation_id`, tests de lista independiente, emparejamiento por id, producto de una variante, resumen, no reinicio y aviso sin coincidencias) y `menu.service.spec.ts` — depende de T068 — 946 pasan, mismas 19 fallas preexistentes
+- [ ] T070 Verificar a mano en la pantalla de promociones (quickstart.md, US4 enmendada)
+- [X] T071 Mover "Guardar y sincronizar" al final del formulario de configuración y habilitarlo solo con cambios válidos (spec.md FR-045/FR-046): `hasChanges()` compara una foto normalizada del formulario tomada al abrir la configuración (`openEdit`/`continueToConfigure`) con el estado actual, en `../pos-heladeria/src/app/modules/promotions/pages/promotions-page.component.ts`; 6 tests nuevos en su spec — 952 pasan, mismas 19 fallas preexistentes
+
+---
+
+## Phase 12: Enmienda 2026-09-21 — Reglas por presentación en el Paso 2 (A-81)
+
+**Contexto**: spec.md FR-047–FR-052, research.md D14, anomalía **A-81**. Solo `pos-heladeria`.
+
+**Independent Test**: definir «8 onzas × 2 = $12.000» y «12 onzas × 2 = $17.000», cambiar los
+productos del Paso 1 y verificar que la lista sigue teniendo dos reglas y que al guardar se
+generan las reglas de backend correctas para los productos seleccionados.
+
+- [X] T072 [P] Registrar la anomalía **A-81** en `specs/000-reconocimiento/registro-de-anomalias.md` (Principio II)
+- [X] T073 En `../pos-heladeria/src/app/modules/promotions/pages/promotions-page.component.ts`: estado `presentationRules` + `rebuildRules()` (expansión a una regla de backend por producto seleccionado), `hydrateFromRules()` (agrupa por presentación/valor/unidades y recupera los productos; espera al menú si no cargó, con un `effect`), `addRuleRow()` sin exigir productos y con una sola regla por presentación, `removeRuleRow()` sobre la lista por presentación, `unresolvedRuleCount()` y su aviso, tablas del Paso 2 y de solo lectura sobre `presentationRules()`, `hasChanges()` incluye reglas y productos; se elimina el panel de confirmación con casilla por producto (`pendingBulkApply`, `confirmBulkApply`, `cancelBulkApply`, `toggleBulkApplyCandidate`)
+- [X] T074 [P] Actualizar `promotions-page.component.spec.ts`: reemplazar los tests de aplicación masiva por los de regla por presentación (una regla por presentación, cambiar productos no rehace reglas, una regla por presentación, regla sin productos, quitar regla, hidratación al abrir y diferida) — 955 pasan, mismas 19 fallas preexistentes — depende de T073
+- [ ] T075 Verificar a mano en la pantalla de promociones (quickstart.md, US4 enmendada por A-81)
+- [X] T079 Duplicar con un nombre ya usado reemplaza a la anterior (spec.md FR-056/FR-057, A-83): `replace_existing` en `POST /promotions/{id}/duplicate` + `duplicate_replacing` (atómico, nunca sobre una `active`, auditoría) y el diálogo «Reemplazar y duplicar» con aviso previo — backend 917 en verde (7 tests nuevos), frontend 962 pasan con las mismas 19 fallas preexistentes
+- [X] T078 Formato del texto de condición con un solo nombre («Llevando 8 onzas x 2 pagas $12.000») en backend y réplica frontend, y tarjeta del menú QR sin «· $X c/u» (spec.md FR-054/FR-055, A-82): `variant_set_condition_text`, `conditionText`, `minPromoPriceForProduct` y sus tests; el script de CI `test_promotions_rules.py` actualizado — backend 910 en verde, frontend 957 pasan con las mismas 19 fallas preexistentes
+- [X] T077 Menú QR: `_build_menu_promotions` fusiona las reglas de una misma promoción con el mismo texto (spec.md FR-053): sin la fusión, la expansión de FR-049 anunciaba «Llevando 2 8 onzas pagas $12.000» una vez por producto; 3 tests nuevos en `test_menu_router.py` — 910 en verde
+- [X] T076 Corregir el bloqueo falso de «variante repetida entre dos reglas»: `sharedVariantConflict` era un `computed` que leía `form.rules` (objeto plano, no signal) y arrastraba el conflicto de una promoción abierta antes, deshabilitando «Guardar y sincronizar» en la siguiente; pasa a método, con test de regresión — 956 pasan, mismas 19 fallas preexistentes
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -198,6 +311,11 @@ pueden avanzar en paralelo con cualquiera de las demás.
 - US1 completa puede avanzar en paralelo con cualquier otra historia (no comparte archivo con ninguna).
 - US3 completa puede avanzar en paralelo con cualquier otra historia (no comparte archivo con ninguna).
 - US2, US4, US5, US6 pueden implementarse en cualquier orden entre sí, pero secuencialmente (o coordinando merges) por compartir `promotions-page.component.ts`.
+- **Fase 10 (enmienda 2026-09-20)**: T043 → Paso A (T045–T047) → Paso B (T048–T051) → Paso C
+  (T052–T059) es el orden de **despliegue**; T060 (US8) comparte archivo con T049 y va después. T044
+  (A-79) ya está hecha y debe existir antes de mergear T052/T057. El Paso C no puede desplegarse
+  hasta que el Paso B lleve al menos un ciclo de despliegue en producción (research.md D10, PWA en
+  caché).
 - Los registros de anomalía (T016, T025, T029) no tienen dependencia de código y pueden adelantarse en cualquier momento antes de la tarea de implementación correspondiente.
 
 ---

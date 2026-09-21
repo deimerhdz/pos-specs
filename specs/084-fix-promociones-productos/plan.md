@@ -9,6 +9,13 @@ carpeta) | **Date**: 2026-09-17 | **Spec**: [spec.md](./spec.md)
 
 ## Summary
 
+> **Enmienda 2026-09-20** — el resumen y la tabla de Constitution Check de abajo describen el plan
+> original (2026-09-17), ya implementado. Los dos ajustes posteriores al formulario de producto
+> (eliminar `product_variants.name`, presentación obligatoria, y reordenar la tarjeta "Tamaños del
+> producto") están en [§ Enmienda 2026-09-20](#enmienda-2026-09-20) al final de este archivo, con su
+> propio re-chequeo de constitución. Donde el texto original dice "columna `presentation_id` nueva
+> y opcional" o "nombre sincronizado por cascada", rige la enmienda.
+
 Seis correcciones independientes sobre funcionalidad ya mergeada a `develop` en ambos repos
 (spec 083, PR #75 backend / PR #83 frontend, y specs 063/066/081 antes de esa): (1) asociar cada
 `ProductVariant` con una `Presentation` del catálogo mediante una columna nueva y sincronizar su
@@ -290,6 +297,52 @@ estándar del proyecto para este problema exacto y no hay ningún uso previo que
 romper. El precio mínimo de la tarjeta del menú QR se calcula 100% en frontend (research.md D6),
 reusando un dato que `menu_variant_promotion` (backend) ya calcula por variante para cualquier
 `min_qty` — cero cambios en `app/api/v1/menu/`.
+
+## Enmienda 2026-09-20
+
+**Alcance**: dos ajustes pedidos por el propietario tras probar el formulario ya implementado —
+(US7) el nombre de la variante desaparece como dato: lo da su presentación, que pasa a ser
+obligatoria, y la columna `product_variants.name` se elimina; (US8) la tabla de tamaños sube a
+justo debajo del encabezado de la tarjeta, antes de "Maneja inventario". Fuente: spec.md
+§Clarifications (sesión 2026-09-20), FR-029–FR-039, anomalía **A-79**.
+
+**Enfoque técnico**
+
+- **Modelo** (data-model.md §Enmienda): `presentation_id NOT NULL` con FK `RESTRICT`; se quitan
+  `name` y `UNIQUE(product_id, name)`; `presentation` se carga `lazy="joined"`. Una migración con
+  paso de datos crea en el catálogo una presentación por cada nombre libre existente y enlaza las
+  variantes; `downgrade` sin pérdida.
+- **API** (contracts/variante-sin-nombre.md): `name` sale de todos los schemas de variante; entran
+  `presentation_id` y `presentation_name`. `presentation_id: null` en el payload = "Presentación
+  única" (get-or-create, research.md D11). Se retira la cascada de renombre de
+  `PATCH /presentations/{id}` y su guarda de colisión.
+- **Frontend** (contracts/formulario-tamanos-orden.md): sin columna "Nombre", sin "Sin
+  presentación", presentación obligatoria en `canSave()`, `<select>` que excluye las ya elegidas,
+  y el bloque "Maneja inventario" movido bajo la tabla. `menu.service.ts` mapea `presentation_name` al
+  modelo interno del cliente, con lo que carrito, checkout y promociones no cambian.
+- **Despliegue en tres pasos** (research.md D10): A backend aditivo → B frontend → C backend
+  destructivo, porque el contrato deja de ser retrocompatible y el menú QR es una PWA en caché.
+- **Alcance de código** (inventariado por `grep`, se repite en T043): backend, 11 archivos con
+  lecturas de `ProductVariant.name` más migración, modelo, schemas y unos 12 archivos de
+  characterization tests/fixtures; frontend, `product-form`, `product.service`, `menu.service`,
+  `menu-lookup`, `dining-cart.service`, `product-select`, `promotions-page` y sus specs.
+
+**Re-chequeo de Constitución** (solo los principios que la enmienda mueve)
+
+| Principio | Evaluación | Estado |
+|---|---|---|
+| **II. El Comportamiento Existente Sigue Protegido** | La enmienda cambia comportamiento observable en producción (nombre libre y "Sin presentación" dejan de existir; un contrato de API no retrocompatible; una migración con paso de datos). Es una decisión de negocio explícita del propietario y queda registrada como **A-79** antes de implementar. | PASS (A-79 ya registrada) |
+| **III. Los Characterization Tests Protegen el Comportamiento Heredado** | Muchos tests y fixtures construyen `ProductVariant(name=…)` y aserta `name`; no se editan en silencio: T057 los actualiza **citando A-79**, y T062 verifica que ningún otro test cambió. Los tests de spec 084 US1 que fijaban la cascada de renombre (FR-004) se reemplazan por uno que fija su ausencia. Los del motor de promociones (`test_promotions_service.py`/`_router.py`) no cambian: el motor no lee nombres. | PASS (actualización explícita planificada) |
+| **IV. Los Nuevos Specs Pueden Introducir Nuevo Comportamiento** | FR-029–FR-039 son la autorización; esta enmienda sustituye a FR-001–FR-007 donde chocan y lo declara en spec.md. | PASS |
+| **V. Nuevas Funcionalidades Antes que Refactorizaciones Oportunistas** | Cada archivo tocado sale de un FR (tabla de contracts/variante-sin-nombre.md). Sin `ReactiveFormsModule`, sin reestructurar `product-form` más allá de mover un bloque y quitar una columna. | PASS |
+| **VI. Evolución Incremental** | US7 y US8 son separables; US7 se parte en tres pasos desplegables (A/B/C) precisamente para que ninguno rompa a un cliente vivo. US8 no tiene dependencias de datos. | PASS |
+| **VII. Compatibilidad con Datos Históricos** | Esta enmienda **sí** reescribe filas de `product_variants` (enlaza `presentation_id`) y agrega filas al catálogo; el texto original de este principio ("no reescribe ninguna fila") aplica solo a la primera migración. Ningún dato histórico se pierde: `sale_items.description` es texto inmutable, no hay columna de nombre en `order_items`/`cart_items`, y el nombre visible de cada variante se conserva exacto (SC-007, verificado en T064 sobre copia de datos reales). `downgrade` re-deriva `name` sin pérdida. | PASS |
+| **VIII. Evolución del Modelo de Datos** | data-model.md §Enmienda especifica columnas, constraints, `ondelete`, orden de la migración, verificación intermedia de 0 nulos, coincidencia exacta de nombres (y por qué) y `downgrade`. Migración idempotente por schema (`@for_each_tenant_schema`), como las anteriores. | PASS |
+| **X. Verificación Obligatoria** | quickstart.md gana secciones US7/US8; T063–T065 ejecutan las suites y el ensayo de migración. | PASS |
+| **XI. Decisiones de Negocio Frente a Decisiones Técnicas** | Negocio (Clarifications 2026-09-20): eliminar el campo, presentación obligatoria, `name` fuera de la API. Técnicas (research.md D10–D12): JOIN vs. columna, atajo `null`, orden de la tarjeta, con alternativas descartadas. Un punto se documenta como **lectura** y no como instrucción literal: la posición del interruptor entre la tabla y el detalle (D12). | PASS |
+| **XII. Trazabilidad** | spec.md (Clarifications 2026-09-20, FR-029–039) → este plan/research/data-model/contracts → A-79 → tasks.md (Fase 10, T043–T065) → tests → quickstart.md. | PASS |
+
+Sin violaciones que justificar en Complexity Tracking.
 
 ## Complexity Tracking
 

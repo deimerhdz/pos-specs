@@ -52,6 +52,9 @@ lectura ingenua de `spec.md`:
 
 ## D1 — Modelo de la asociación variante↔presentación: columna vs. tabla puente
 
+> **Vigente**, con un ajuste (D10): la columna `presentation_id` sigue siendo la decisión correcta,
+> pero pasa a `NOT NULL`.
+
 **Decisión**: columna nueva `product_variants.presentation_id` (FK nullable a `presentations.id`),
 relación 1:1 por variante.
 
@@ -66,6 +69,10 @@ adicional en cada lectura de variante (recibos, menú, promociones) para un bene
 simple ya cubre.
 
 ## D2 — Sincronización de nombre: columna copiada + cascada vs. nombre derivado (JOIN)
+
+> **Superada por D10 (2026-09-20, A-79)**: el propietario pidió eliminar la columna `name`, que es
+> exactamente la alternativa que esta decisión descartó. Se conserva el texto como registro de lo
+> que se implementó primero (migración `a9f7d0310f6b`).
 
 **Decisión**: `product_variants.name` sigue siendo una columna propia, almacenada. Al asociar o
 reasociar una presentación (`FR-002`/`FR-003`), el backend copia `Presentation.name` dentro de la
@@ -217,3 +224,162 @@ estado `active`).
 amplia de lo que pide esta spec — bloquear con ella también dejaría `Finalizada` sin poder
 editarse, violando FR-009. La guarda nueva en `service.update()` debe ser específica:
 `if promo.status == "active": raise HTTPException(409, ...)`.
+
+---
+
+## D10 — Eliminar `product_variants.name` (enmienda 2026-09-20, A-79)
+
+**Decisión**: se elimina la columna `name` y `UNIQUE(product_id, name)`; `presentation_id` pasa a
+`NOT NULL` con FK `ON DELETE RESTRICT`; el nombre que ve cualquier consumidor sale de un JOIN a
+`presentations`. La API deja de aceptar y devolver `name` de variante (devuelve `presentation_id` +
+`presentation_name`). Confirmado por el propietario (spec.md §Clarifications, sesión 2026-09-20).
+
+**Rationale**: con US1 la variante ya no tenía un nombre "propio" sino una copia del de su
+presentación, mantenida por una cascada y una guarda de colisión (FR-004) que existían solo para
+sostener esa copia. Quitarla elimina un dato redundante, una cascada, un caso límite y un 409.
+D2 descartó esta opción por el radio de impacto (~11 archivos backend, ~7 frontend leen el
+nombre); ese costo se acepta ahora porque la decisión ya no es "sincronizar o no", sino "el nombre
+no es un dato de la variante". El JOIN es barato: `presentations` es un catálogo pequeño y
+`ProductVariant.presentation` se declara `lazy="joined"`.
+
+**Inventario de impacto (2026-09-20)**: backend, 11 archivos con lecturas de `ProductVariant.name`
+(tabla completa en contracts/variante-sin-nombre.md); frontend, `product-form.component.ts` (8),
+`product.service.ts` (5), `promotions-page.component.ts` (4), `dining-cart.service.ts` (5),
+`menu.service.ts`, `menu-lookup.ts`, `product-select.component.ts`, `review-step`/`cart` (reciben
+`variantName` ya resuelto del carrito). Los `v.name` de `cash-report`/`cash-dashboard` **no** son de
+variante (son de método de pago); no se tocan. No hay columnas de `order_items`/`cart_items` que
+guarden el nombre (verificado en los modelos), y `sale_items.description` ya es texto inmutable
+(`models/sale.py:132`), así que el historial de ventas no cambia.
+
+**Riesgo principal — contrato no retrocompatible con clientes en caché**: el menú QR es una PWA
+(`ngsw-config.json`); un cliente con el bundle anterior en caché leería `v.name` de una respuesta
+que ya no lo trae y mostraría variantes sin nombre hasta que el service worker se actualice.
+**Mitigación — despliegue en tres pasos**, cada uno desplegable por separado:
+
+1. **Paso A, backend aditivo (sin migración)**: las respuestas ganan `presentation_id` y
+   `presentation_name` **manteniendo** `name`; `VariantSaveIn.name`/`VariantCreate.name` pasan a
+   opcionales; `presentation_id` nulo **y** `name` ausente ⇒ "Presentación única" (D11). Con `name`
+   presente rige el comportamiento actual, para que el frontend anterior siga funcionando.
+2. **Paso B, frontend**: lee `presentation_name`, elimina la columna "Nombre", envía siempre
+   `presentation_id` (nulo solo sin tamaños) y nunca `name`. Cuando esta versión lleva un ciclo
+   de despliegue publicada, ningún cliente vivo depende de `name`.
+3. **Paso C, backend destructivo**: migración (enlazar los nombres libres pendientes, `NOT NULL`,
+   quitar columna y unicidad), retiro de `name` de los schemas y de la rama de compatibilidad del
+   paso A. Como la migración repite el enlazado, absorbe cualquier variante de nombre libre que el
+   frontend anterior haya creado durante los pasos A–B.
+
+En desarrollo los tres pasos viven en la misma rama; la separación importa para el orden de
+despliegue, no para el orden de escritura del código (tasks.md los marca).
+
+**Alternatives considered**: (a) mantener `name` en la API como campo calculado — descartada por el
+propietario (menos cambios, pero deja dos nombres para lo mismo en el contrato); (b) dejar la
+columna y solo ocultarla en el formulario — descartada por el propietario ("eliminarlo del modelo de
+la base de datos"); (c) `presentation_id` opcional con nombre calculado `COALESCE` — descartada
+(D11): reintroduce la variante "sin nombre" que la decisión quiere eliminar.
+
+## D11 — "Presentación única" como fila del catálogo y atajo `presentation_id: null`
+
+**Decisión**: la variante de un producto sin tamaños se asocia a una fila normal del catálogo de
+presentaciones llamada "Presentación única" (literal de A-74), creada por get-or-create al
+necesitarla (por nombre exacto, sin filtrar `active`). No se agrega columna `is_system` ni se
+siembra en la migración de tenants. En el payload de guardado, `presentation_id: null` significa
+"usar la Presentación única".
+
+**Rationale**: (1) el aprovisionamiento de tenants nuevos no garantiza que una migración de datos
+los alcance; get-or-create funciona igual en tenants viejos y nuevos. (2) El frontend no necesita
+conocer el id de esa presentación para guardar un producto sin tamaños, ni esperar a que
+`PresentationService.allPresentations` cargue. (3) Sin marca de "sistema" no hay un caso especial
+que mantener: si el administrador la renombra o desactiva, las variantes existentes conservan su
+enlace y su nombre actual; solo un producto **nuevo** sin tamaños crearía otra fila con el literal.
+Es un caso raro con consecuencia mínima (dos presentaciones de nombre distinto en el catálogo).
+
+**Riesgo aceptado**: `null` como atajo hace que una fila de un producto **con** tamaños que llegue
+sin presentación se guarde silenciosamente como "Presentación única". El frontend lo impide
+(`canSave()`), y el backend no puede distinguir los dos casos sin un campo extra; a cambio, dos
+filas nulas del mismo producto sí chocan por unicidad (409). Si el descuido se vuelve frecuente,
+la salida es exigir `presentation_id` en el backend y que el frontend lo resuelva desde el
+catálogo — cambio local, no de modelo.
+
+**Alternatives considered**: `is_system BOOLEAN` en `presentations` + siembra en migración —
+descartada por el problema (1); `presentation_id` obligatorio en el payload con el id resuelto en
+el frontend — descartada por (2), queda como salida de respaldo; endpoint `GET /presentations/default`
+— sobra con el atajo.
+
+## D12 — Orden de la tarjeta "Tamaños del producto"
+
+**Decisión**: el bloque "Maneja inventario" (interruptor + aviso) se mueve **después** de la tabla
+de tamaños y de la lista de presentaciones desactivadas, y **antes** del detalle del tamaño activo.
+Con tamaños apagados no hay tabla y queda justo bajo el encabezado, como hoy.
+
+**Rationale**: el interruptor solo gobierna el bloque de insumos fijos y la parte de inventario de
+"Sabores a elegir" (comentario del template, spec 027/064); ponerlo entre el encabezado y la tabla
+lo presenta como el control de la tabla. Debajo de la tabla y encima del detalle queda adyacente a
+lo que sí gobierna, y el recuadro "Activa «Maneja inventario» arriba…" sigue diciendo la verdad.
+
+**Punto no dictado literalmente por el propietario**: pidió que la tabla aparezca "debajo de
+Tamaños del producto"; que el interruptor quede entre la tabla y el detalle (y no, p. ej., al pie de
+toda la tarjeta) es la lectura más coherente con el resto del formulario y se documenta como tal —
+`contracts/formulario-tamanos-orden.md` la fija; si se prefiere otra posición, es un cambio de
+orden de bloques sin efecto en datos.
+
+**Alternatives considered**: interruptor al final de la tarjeta, debajo del detalle — descartada:
+el recuadro gris del detalle dice "arriba" y quedaría falso, y el interruptor quedaría lejos de lo
+que habilita.
+
+## D7 (actualización) — Anomalía adicional
+
+- **A-79** — registrada 2026-09-20: eliminar `product_variants.name`, presentación obligatoria y
+  `name` fuera de la API (D10/D11). Existe en `registro-de-anomalias.md` antes de implementar. El
+  reordenamiento de la tarjeta (D12) es de presentación pura, sin cambio de comportamiento
+  observable de datos ni de reglas, y **no** requiere anomalía propia.
+
+## D13 — Selector de presentación del Paso 2: catálogo vs. variantes de los productos (A-80)
+
+**Decisión**: el selector lista las presentaciones activas del catálogo
+(`PresentationService.allPresentations`, ya cargado en otras pantallas), y la regla se resuelve al
+configurar: por cada producto seleccionado se busca su variante con esa `presentation_id` y se
+guarda como fila independiente con una lista explícita de variantes (sin cambios en backend).
+
+**Rationale**: tras A-79 toda variante tiene `presentation_id`, así que el emparejamiento por id es
+exacto y la etiqueta "Presentación única" para productos de una variante (un residuo de cuando ese
+nombre era un literal guardado) deja de tener sentido. Nada del backend depende de la etiqueta: el
+motor y las guardas (`_guard_variant_overlap`, `_guard_product_overlap`) trabajan con variantes.
+El menú público ya devuelve `presentation_id` por variante (A-79), por lo que no hay endpoint
+nuevo: `menu.service.ts` solo lo propaga al modelo del cliente.
+
+**Alternatives considered**: modo dinámico (la regla guarda `presentation_id` + productos y el
+motor resuelve en cada venta) — descartado por el propietario: exige tabla/columnas nuevas, cambio
+del motor de cálculo, del menú QR (precio mínimo, spec 084 US3) y de ambas guardas de
+exclusividad, y reabre A-65. Selector solo con presentaciones usadas por algún producto —
+descartado por el propietario en favor de mostrar todo el catálogo activo.
+
+## D14 — Regla por presentación en la UI, expandida a reglas por producto al guardar (A-81)
+
+**Decisión**: el formulario de configuración guarda `presentationRules` (presentación, unidades,
+valor) y la selección de productos como estado propio; `form.rules` (lo que recibe el backend) se
+deriva de ellos con `rebuildRules()`: una regla de backend por cada par (regla de presentación,
+producto seleccionado con esa presentación), con solo esa variante. Al abrir una promoción
+guardada se hace la operación inversa (`hydrateFromRules`), agrupando por presentación + valor +
+unidades y recuperando los productos de las variantes.
+
+**Rationale**: reutiliza el modelo y el motor de spec 063/084 sin tocarlos — cada regla de backend
+sigue siendo un conjunto explícito de variantes (A-65) y sigue sin mezclar productos (A-77) — y da
+al administrador la lista corta que pidió. Las guardas del backend (`_guard_variant_overlap`,
+`_guard_package_is_discount`, `_guard_product_overlap`) siguen aplicando a cada regla expandida.
+La comprobación local de precio de paquete usa el precio más barato entre los productos
+seleccionados con esa presentación, que es conservadora respecto de la del backend por regla.
+
+**Consecuencias asumidas**: (1) el backend no persiste la regla por presentación sin variantes, así
+que una regla sin ningún producto seleccionado que la tenga no se guarda; (2) una regla antigua
+con variantes de varios productos (anterior a A-77) se muestra como una regla de presentación y se
+normaliza a una regla por producto en el siguiente guardado; (3) reglas guardadas de igual
+presentación pero con valor o unidades distintos entre productos (datos antiguos) aparecen como
+dos reglas de la misma presentación y el formulario las marca como conflicto (variante repetida)
+hasta que se corrijan.
+
+**Alternatives considered**: modelo dinámico (la regla guarda la presentación y el motor resuelve
+las variantes en cada venta) — descartado antes (D13) y sigue descartado: no es necesario para el
+flujo pedido, que se resuelve al configurar. Persistir `presentation_id` en `promotion_rules` para
+conservar reglas sin productos — se descarta por ahora; sería un cambio de modelo aditivo si la
+limitación (1) resulta molesta.
+

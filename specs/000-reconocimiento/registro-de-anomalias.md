@@ -2455,6 +2455,187 @@ el criterio de exclusividad exclusivamente por variante (spec 063 FR-014).
 
 ---
 
+### A-79 — [DECISIÓN DE NEGOCIO — spec 084, enmienda 2026-09-20] `product_variants.name` desaparece: el nombre de una variante lo da su presentación, que pasa a ser obligatoria
+
+**Qué cambia**: se elimina la columna `product_variants.name` (`app/models/product_variant.py`) y su
+`UniqueConstraint(product_id, name)`. `product_variants.presentation_id` (introducida por la propia
+spec 084, US1) pasa de `NULL` a `NOT NULL` y su FK de `ON DELETE SET NULL` a `ON DELETE RESTRICT`;
+la unicidad por producto la garantiza en adelante solo `UNIQUE(product_id, presentation_id)`. La
+opción "Sin presentación" y el nombre libre de variante desaparecen del formulario de producto
+(columna "Nombre" incluida). La API deja de aceptar y de devolver `name` para una variante en
+todos sus schemas (`VariantSaveIn`, `VariantSaveOut`, `VariantResponse`, `VariantCreate`,
+`VariantUpdate`, menú público, promociones); en su lugar devuelve `presentation_id` y
+`presentation_name`. La variante default de un producto sin tamaños deja de ser un literal
+guardado y pasa a ser una fila del catálogo de presentaciones llamada "Presentación única"
+(get-or-create por tenant; conserva el literal de A-74). La cascada de renombre de
+`PATCH /presentations/{id}` (spec 084 FR-004) y su guarda de colisión de nombres dejan de existir:
+ya no hay una copia del nombre que sincronizar. Migración con paso de datos: cada `name` libre ya
+guardado sin presentación se convierte en una fila del catálogo (o reutiliza la que tenga ese
+mismo nombre exacto) y la variante queda enlazada a ella.
+
+**Por qué cambia**: con la asociación de spec 084 US1, el nombre de la variante era una copia
+redundante del de la presentación que había que mantener sincronizada (cascada, guarda de
+colisión, campo de solo lectura en el formulario). El propietario del producto pidió quitarla:
+"la presentación ya lo trae, sería redundante". Con presentación obligatoria, el catálogo de
+Presentaciones (spec 083) pasa a ser la única fuente de nombres de variante.
+
+**Quién tomó la decisión y cuándo**: propietario del producto, 2026-09-20, en
+`specs/084-fix-promociones-productos/spec.md` §Clarifications (sesión 2026-09-20: eliminar el
+campo nombre; presentación obligatoria con "Presentación única" como fila del catálogo; `name`
+fuera de la API).
+
+**Funcionalidades afectadas**: en `pos-backend`, el modelo, una migración nueva con paso de datos,
+`catalog/service.py` (`variante_duplicada`, `ensure_default_variant`, `_save_variant_entry`),
+`catalog/router.py` (`POST`/`PATCH /variants`, consulta de grupos de opciones),
+`presentations/router.py` (se retira `_rename_conflict` y la cascada), `products/service.py`,
+`menu/router.py`, `promotions/service.py`, `orders/checkout.py`, `sales/service.py` y
+`catalog_engine/consumption.py` (lecturas de `ProductVariant.name`, inventariadas por `grep` el
+2026-09-20 — la tarea T043 vuelve a inventariarlas antes de tocar código), más los characterization
+tests que fijan `name` (se actualizan citando esta entrada, Principio III). En `pos-heladeria`,
+formulario de producto, `product.service.ts`, `menu.service.ts`, `menu-lookup.ts`,
+`dining-cart.service.ts` (de donde salen carrito y checkout), `product-select.component.ts` y
+`promotions-page.component.ts` (sin cambio de código: consume el menú del cliente, cuyo nombre de
+variante ahora sale de `presentation_name`). **Cambio de contrato
+no retrocompatible**: exige desplegar en tres pasos —backend aditivo, frontend, backend destructivo— (ver `research.md` D10). Los recibos y
+ventas ya emitidos no cambian: su descripción ya se guardó como texto en el momento de la venta.
+La migración `downgrade` es sin pérdida (re-crea `name` desde `presentations.name`).
+
+**Clasificación**: DECISIÓN DE NEGOCIO.
+
+**Tratamiento acordado**: `specs/084-fix-promociones-productos/tasks.md` (Fase 10, US7). Esta
+entrada `A-79` debe existir **antes** de mergear la migración que elimina `name` y los commits que
+actualizan los characterization tests — ambos la citan. Revierte parcialmente el criterio de
+opcionalidad de spec 084 FR-005/FR-007 (nombre libre, no retroactivo), que queda sustituido por
+FR-029 a FR-036.
+
+---
+
+### A-80 — [DECISIÓN DE NEGOCIO — spec 084, enmienda 2026-09-20] El selector de presentación del Paso 2 de una promoción lista el catálogo, no las variantes de los productos seleccionados
+
+**Qué cambia**: en la pantalla de configuración de una promoción, el selector "Presentación /
+Tamaño" del Paso 2 (`promotions-page.component.ts`, antes `availableLabels()`) deja de ser la unión
+de las etiquetas de las variantes de los productos elegidos en el Paso 1 (spec 083 FR-013) y pasa
+a listar **todas las presentaciones activas del catálogo** (`availablePresentations()`),
+independientemente de los productos seleccionados. El emparejamiento de la regla con las variantes
+pasa de comparar una etiqueta de texto a comparar `presentation_id`; desaparece la etiqueta
+"Presentación única" que se ponía a todo producto de una sola variante (ahora cada variante tiene
+una presentación real, A-79). La regla se sigue guardando como una lista explícita de variantes
+(una fila por producto, sin cambio de modelo ni de motor): las variantes se resuelven **al
+configurar**, no al vender. La elección de presentación ya no se reinicia al cambiar la selección
+de productos, y un aviso indica a cuántos de los productos seleccionados se aplicaría.
+
+**Por qué cambia**: el propietario señaló que las presentaciones son independientes de los
+productos y que el objetivo es aplicar la promoción a la presentación de los productos ya
+seleccionados; con la lista atada al Paso 1, un Paso 1 vacío dejaba el Paso 2 sin opciones.
+
+**Quién tomó la decisión y cuándo**: propietario del producto, 2026-09-20, en
+`specs/084-fix-promociones-productos/spec.md` §Clarifications (sesión 2026-09-20, preguntas sobre
+alcance de la regla y contenido del selector).
+
+**Funcionalidades afectadas**: solo `pos-heladeria` (`promotions-page.component.ts`,
+`menu.service.ts` — el menú del cliente gana `presentation_id` por variante — y sus specs). Sin
+cambios en `pos-backend`. **No reabre A-65** (spec 063 FR-003/FR-010): el alcance sigue siendo una
+lista explícita de variantes; el modo dinámico (la regla guarda la presentación y el motor la
+resuelve en cada venta) se evaluó y se descartó por ahora.
+
+**Clasificación**: DECISIÓN DE NEGOCIO.
+
+**Tratamiento acordado**: `specs/084-fix-promociones-productos/tasks.md` (Fase 11). Sustituye a
+spec 083 FR-013 para el contenido del selector. Revertir el commit de `promotions-page` restaura la
+lista atada a los productos.
+
+---
+
+### A-81 — [DECISIÓN DE NEGOCIO — spec 084, enmienda 2026-09-21] La lista de reglas de una promoción es por presentación (una regla por presentación), no una fila por producto
+
+**Qué cambia**: en la pantalla de configuración de una promoción, la lista del Paso 2 deja de
+tener una fila por producto (spec 084 A-77: «una fila de regla independiente por cada producto») y
+pasa a tener **una regla por presentación** — p. ej. «8 onzas · 2 unidades × $12.000» y «12 onzas
+· 2 unidades × $17.000» — sin importar cuántos productos haya seleccionados en el Paso 1. Cambiar
+los productos del Paso 1 no obliga a quitar ni rehacer reglas: al guardar, cada regla de
+presentación se **expande** a una regla de backend por cada producto seleccionado que tenga esa
+presentación (una variante por regla, como en A-77, para que un paquete no mezcle productos).
+Desaparece el panel de confirmación con casilla por producto (spec 084 FR-017/FR-018): excluir un
+producto se hace en el Paso 1. Una presentación admite una sola regla por promoción (quitarla y
+volver a agregarla para cambiarla); una regla que no alcanza a ningún producto seleccionado se
+acepta en la lista pero no genera reglas de backend ni se persiste hasta que algún producto
+seleccionado tenga la presentación. Al abrir una promoción guardada, las reglas de backend se
+agrupan por presentación/valor/unidades y los productos seleccionados se recuperan de sus
+variantes.
+
+**Por qué cambia**: el propietario señaló que para su caso de uso las reglas de precio casi nunca
+cambian y sí cambian los productos; con una fila por producto, cambiar de productos obligaba a
+eliminar las reglas anteriores y crear otras, duplicando presentaciones y precios.
+
+**Quién tomó la decisión y cuándo**: propietario del producto, 2026-09-21, en
+`specs/084-fix-promociones-productos/spec.md` §Clarifications (sesión 2026-09-21).
+
+**Funcionalidades afectadas**: solo `pos-heladeria` (`promotions-page.component.ts` y su spec).
+Sin cambios en `pos-backend`: la persistencia sigue siendo una lista explícita de variantes por
+regla (A-65, A-77, A-80 no cambian en el modelo). **Limitación conocida**: el backend no guarda la
+regla «por presentación» sin variantes, así que una regla sin ningún producto seleccionado con esa
+presentación no se conserva al guardar; y una regla combinada antigua con variantes de varios
+productos se normaliza a una regla por producto la próxima vez que se guarde.
+
+**Clasificación**: DECISIÓN DE NEGOCIO.
+
+**Tratamiento acordado**: `specs/084-fix-promociones-productos/tasks.md` (Fase 12). Sustituye a
+A-77 en lo relativo a la lista y al panel de confirmación; el resto de A-77 (una variante por regla
+de backend) sigue vigente.
+
+---
+
+### A-82 — [DECISIÓN DE NEGOCIO — spec 084, enmienda 2026-09-21] Formato del texto de condición con un solo nombre y de la tarjeta de promoción del menú QR
+
+**Qué cambia**: (1) `variant_set_condition_text` (`app/api/v1/promotions/service.py`) y su réplica
+`conditionText` (`promotion-condition.util.ts`) — el texto de condición que ven el cartel del menú
+QR, la terminal y la administración — pasan, **cuando el conjunto se nombra con un solo nombre**
+(una presentación), de «Llevando 2 8 onzas pagas $12.000» a «Llevando 8 onzas x 2 pagas $12.000»,
+y de «15% llevando 3 8 onzas» a «15% llevando 8 onzas x 3». Los conjuntos con varios nombres
+(«Llevando 2 entre A, B y C pagas $X»), el respaldo por conteo y los textos de cantidad mínima 1
+(«Cada X a $Y», «10% en X») no cambian. (2) La tarjeta de producto de la pestaña Promociones del
+menú QR muestra solo la condición corta («Desde 2 x $12.000») y deja de mostrar el equivalente por
+unidad («· $6.000 c/u»): `minPromoPriceForProduct` usa `short_condition` en vez de `display_text`.
+El modal de producto conserva su texto (`display_text`, spec 066 FR-008).
+
+**Por qué cambia**: pedido del propietario del producto; con la regla por presentación (A-81) el
+texto anterior leía «2 8 onzas», ambiguo. **Quién y cuándo**: propietario del producto, 2026-09-21.
+
+**Funcionalidades afectadas**: `pos-backend` (`promotions/service.py`, characterization tests
+`test_promociones_legibles.py` y `test_menu_router.py`, y el script de CI
+`app/scripts/test_promotions_rules.py`) y `pos-heladeria` (`promotion-condition.util.ts`,
+`promotion-pricing.util.ts` y sus specs). **Clasificación**: DECISIÓN DE NEGOCIO. **Tratamiento
+acordado**: `specs/084-fix-promociones-productos/tasks.md` (T078). Modifica el contrato de spec 066
+(`texto-condicion.md` §3/§5) solo en el caso de un nombre; el resto sigue vigente.
+
+---
+
+### A-83 — [DECISIÓN DE NEGOCIO — spec 084, enmienda 2026-09-21] Duplicar una promoción con un nombre ya usado reemplaza a la anterior
+
+**Qué cambia**: `POST /promotions/{id}/duplicate` acepta `replace_existing` (por defecto `false`).
+Sin él, un nombre repetido sigue respondiendo `409 Ya existe una promoción con ese nombre` (spec
+063 FR-017, sin cambio). Con `replace_existing: true`, la promoción que ya usa ese nombre
+(incluida la propia fuente) **se elimina con todas sus reglas** y la copia —en Borrador, con las
+reglas y la vigencia de la fuente— ocupa su nombre, todo en una sola transacción
+(`service.duplicate_replacing`). Una promoción `active` nunca se reemplaza (`409`, hay que
+pausarla antes). La eliminación queda en auditoría (`action="delete"`, con `replaced_by`). En el
+frontend, el diálogo «Duplicar» avisa en el propio diálogo que ya existe una promoción con ese
+nombre y que se eliminará, y cambia el botón a «Reemplazar y duplicar»; cambiar el nombre quita el
+aviso.
+
+**Por qué cambia**: pedido del propietario del producto: al duplicar con un nombre ya existente se
+debe eliminar la anterior y permitir crear la copia, en vez de obligar a borrarla a mano.
+
+**Quién y cuándo**: propietario del producto, 2026-09-21. **Funcionalidades afectadas**: `pos-backend`
+(`promotions/router.py`, `service.py`, `schemas.py`; tests `test_promotions_duplicate_replace.py`) y
+`pos-heladeria` (`promotions-page.component.ts`, `promotion.service.ts`, interfaz y spec). **Riesgo
+asumido**: es una eliminación de datos; se mitiga con el aviso previo, el bloqueo de promociones
+activas, la atomicidad y el registro de auditoría. Las ventas ya emitidas no dependen de la
+promoción eliminada (guardan su descuento como texto/JSON). **Clasificación**: DECISIÓN DE NEGOCIO.
+**Tratamiento acordado**: `specs/084-fix-promociones-productos/tasks.md` (T079).
+
+---
+
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
 
 La entrada #1 de `memoria-historica.md` (2026-07-17, commit `8777acbc`) documenta que

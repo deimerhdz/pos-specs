@@ -1,5 +1,12 @@
 # Contrato: Asociación de variante con presentación del catálogo (bug 2)
 
+> **Enmienda 2026-09-20 (A-79)** — este contrato describe la versión intermedia (presentación
+> opcional, `name` conservado, cascada de renombre). Quedan **vigentes** solo el schema
+> `presentation_id` en `VariantSaveIn`/`VariantResponse` y las validaciones 422/409 de asociación.
+> Quedan **sustituidos** el uso de `name`, la opción "Sin presentación", el `PATCH /presentations/{id}`
+> con cascada y su guarda de colisión, y el frontend de nombre de solo lectura. Fuente vigente:
+> [variante-sin-nombre.md](./variante-sin-nombre.md).
+
 Cubre spec.md FR-001 a FR-007. Ver [data-model.md](../data-model.md) para el cambio de esquema.
 
 ## `POST /products` y `PUT /products/{id}` (o el endpoint equivalente de guardado de variantes)

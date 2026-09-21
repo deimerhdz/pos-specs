@@ -17,6 +17,17 @@ productos seleccionados que hagan parte de la promoción. 4. La promoción no se
 cuando esté vigente; actualmente se permite configurar cuando está vigente desde el listado de
 promociones. 5. Arreglar el problema del modal de acciones para evitar el scroll en la tabla."
 
+**Enmienda 2026-09-20** (sobre una spec ya implementada, 42/42 tareas): tras probar el formulario
+de producto con la asociación variante↔presentación en pantalla, el propietario pidió dos ajustes
+al formulario de crear y editar producto — (1) quitar el campo "Nombre" de cada tamaño, porque la
+presentación ya lo trae, y eliminarlo también del modelo de base de datos (User Story 7,
+FR-029 a FR-036, anomalía **A-79**); y (2) mover la tabla de tamaños para que aparezca justo debajo
+del encabezado "Tamaños del producto", y no debajo del interruptor "Maneja inventario", que hoy
+hace parecer que la tabla es lo que ese interruptor habilita (User Story 8, FR-037 a FR-039). La
+enmienda **sustituye** parte de lo dicho en User Story 1 y FR-001 a FR-007 (opcionalidad de la
+presentación, nombre libre, cascada de renombre): esos textos quedan marcados abajo con *(enmendado)*.
+Ver `## Clarifications` → sesión 2026-09-20.
+
 ## Contexto y relación con specs anteriores
 
 Estos cinco bugs se detectaron probando el comportamiento en producción de funcionalidad ya
@@ -122,6 +133,46 @@ agrega dos decisiones de negocio nuevas confirmadas con el propietario del produ
   promoción distinta. Dentro de la **misma** promoción, seleccionar varias variantes del mismo
   producto (p. ej. "Pequeña" y "Grande") sigue permitido sin cambio.
 
+### Session 2026-09-20
+
+- Q: Al quitar el campo "Nombre" de la variante, ¿cómo se nombran las variantes que hoy no tienen
+  presentación — la variante default "Presentación única" de un producto sin tamaños y las de
+  nombre libre ya guardadas con "Sin presentación"? → A: La presentación pasa a ser **obligatoria**
+  para toda variante. "Presentación única" deja de ser un literal guardado en la variante y pasa a
+  ser una fila del catálogo de presentaciones (se crea sola por tenant si no existe). La migración
+  crea, para cada nombre libre ya guardado, una fila del catálogo con ese nombre (o reutiliza la
+  que ya lo tenga) y enlaza la variante — ningún nombre existente se pierde. La opción "Sin
+  presentación" desaparece del selector.
+- Q: Con el nombre derivado de la presentación, ¿el campo `name` de una variante se mantiene en las
+  respuestas de la API como dato calculado de solo lectura, o se elimina de la API? → A: Se elimina
+  de la API. Todas las respuestas que hoy traen el nombre de una variante pasan a traer
+  `presentation_id` y `presentation_name`; el payload de guardado deja de aceptar `name`.
+- Q: El segundo ajuste ("el catálogo de variantes parece la opción que se habilita al marcar
+  Maneja inventario"), ¿pide mover la tabla de tamaños para que quede justo debajo del encabezado
+  "Tamaños del producto", con "Maneja inventario" después de la tabla? → A: Sí. Orden final dentro
+  de la tarjeta: encabezado y interruptor de tamaños → tabla de tamaños (con sus presentaciones
+  desactivadas) → "Maneja inventario" → detalle del tamaño activo (insumos fijos y sabores).
+
+- Q: El selector de presentación del Paso 2 de una promoción listaba solo las presentaciones de
+  las variantes de los productos ya elegidos en el Paso 1 (spec 083 FR-013): con el Paso 1 vacío,
+  quedaba vacío. ¿Debe listar el catálogo, y cómo se guarda el alcance? → A: Debe listar **todas
+  las presentaciones activas del catálogo**, independientes de los productos, y la regla se
+  resuelve **al configurar**: se guarda la lista explícita de variantes (una fila por producto
+  seleccionado que tenga esa presentación), como hoy, sin modo dinámico en la venta (A-65 y spec
+  063 FR-003/FR-010 no cambian). Se descartó la variante dinámica (la regla guarda la presentación
+  y el motor la resuelve en cada venta) por exigir cambios de modelo, motor, menú QR y guardas de
+  exclusividad. Registrado como **A-80**.
+
+### Session 2026-09-21
+
+- Q: Al agregar la regla «8 onzas × 2 = $12.000» con varios productos seleccionados, el sistema
+  generaba una fila por producto (A-77): cambiar de productos obligaba a quitar esas filas y
+  crear otras, y las mismas presentaciones y precios se duplicaban por producto. ¿Cómo debe ser?
+  → A: La lista debe tener **una regla por presentación** («8 onzas · 2 × $12.000», «12 onzas · 2
+  × $17.000»), independiente de los productos. Al seleccionar o quitar productos en el Paso 1, las
+  reglas se aplican solas a la variante de cada producto seleccionado que tenga esa presentación
+  (el producto ya trae la presentación en su variante). Registrado como **A-81**.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Asociar cada variante de un producto con una presentación del catálogo (Priority: P1)
@@ -152,13 +203,15 @@ también a "Extra Grande".
 2. **Given** una variante ya asociada a una presentación, **When** el administrador elige otra
    presentación distinta para esa misma variante, **Then** el nombre de la variante se actualiza al
    nombre de la nueva presentación elegida.
-3. **Given** el administrador no quiere asociar una variante a ninguna presentación del catálogo,
-   **When** deja el selector en "Sin presentación", **Then** puede seguir escribiendo el nombre de
-   esa variante libremente, igual que hoy.
+3. ~~**Given** el administrador no quiere asociar una variante a ninguna presentación del
+   catálogo, **When** deja el selector en "Sin presentación", **Then** puede seguir escribiendo el
+   nombre de esa variante libremente, igual que hoy.~~ *(enmendado 2026-09-20 — reemplazado por
+   User Story 7: la presentación es obligatoria y no existe "Sin presentación")*
 4. **Given** una presentación del catálogo con una o más variantes de producto ya asociadas a ella,
-   **When** el administrador la renombra desde la sección "Presentaciones", **Then** el nombre de
-   cada variante asociada se actualiza para reflejar el nuevo nombre, sin que el administrador
-   tenga que editar cada producto uno por uno.
+   **When** el administrador la renombra desde la sección "Presentaciones", **Then** el nombre que
+   ve cada variante asociada refleja el nuevo nombre, sin que el administrador tenga que editar
+   cada producto uno por uno. *(enmendado 2026-09-20 — ya no se copia ni se "actualiza" ningún
+   nombre en las variantes: lo muestran leyendo la presentación, ver FR-030)*
 5. **Given** un producto con dos variantes ya asociadas cada una a una presentación distinta,
    **When** el administrador intenta asociar una tercera variante del mismo producto a una
    presentación que ya usa otra variante de ese mismo producto, **Then** el sistema lo impide y
@@ -351,33 +404,127 @@ recorte ninguna opción.
 
 ---
 
+### User Story 7 - El nombre de una variante lo da su presentación: el campo "Nombre" se elimina (Priority: P1)
+
+*(Enmienda 2026-09-20.)* Con la asociación de User Story 1, cada fila de tamaño del formulario
+mostraba a la vez un campo "Nombre" (de solo lectura, copia del de la presentación) y el selector
+de "Presentación": dos columnas con el mismo dato. El administrador pidió quitar el nombre: una
+variante se identifica por su presentación y nada más. Esto implica que toda variante tenga una
+presentación (no puede haber variante "sin presentación") y que el nombre deje de existir como dato
+propio de la variante, en el formulario, en la API y en la base de datos.
+
+**Why this priority**: es un cambio de modelo con paso de datos y de contrato de API; cuanto más
+se demore, más lecturas nuevas de `variant.name` se escriben. Además elimina la cascada de renombre
+(FR-004 original) y su caso límite de colisión de nombres, que ya no tienen razón de ser.
+
+**Independent Test**: en un tenant con un producto de dos tamaños "Pequeña"/"Grande" y otro con
+una variante de nombre libre "Familiar" sin presentación, aplicar la migración; abrir ambos
+productos en el formulario y verificar que no hay columna "Nombre", que los tres tamaños muestran su
+presentación ("Pequeña", "Grande", "Familiar") y que "Familiar" ahora existe en el catálogo de
+Presentaciones. Renombrar "Grande" a "Extra Grande" desde el catálogo y verificar que el menú QR,
+el carrito de mesa y el formulario de producto ya muestran "Extra Grande" sin ninguna otra acción.
+
+**Acceptance Scenarios**:
+
+1. **Given** el formulario de crear o editar un producto con tamaños, **When** el administrador ve
+   la tabla, **Then** cada fila muestra solo el selector de presentación y el precio (más el
+   arrastre, el número y "Eliminar"); no hay columna ni campo "Nombre".
+2. **Given** una fila de tamaño nueva sin presentación elegida, **When** el administrador intenta
+   guardar el producto, **Then** el sistema lo impide indicando qué fila no tiene presentación —
+   no existe la opción "Sin presentación".
+3. **Given** un producto sin tamaños (interruptor "Tamaños del producto" apagado), **When** el
+   administrador lo guarda, **Then** su única variante queda asociada a la presentación
+   "Presentación única" del catálogo, creada automáticamente si el tenant aún no la tenía.
+4. **Given** el sistema con variantes ya guardadas con nombre libre y sin presentación, **When** se
+   aplica la migración, **Then** por cada nombre distinto se crea una presentación con ese nombre
+   en el catálogo (o se reutiliza la que ya lo tenga) y cada variante queda enlazada a ella, sin
+   que ningún nombre visible cambie.
+5. **Given** cualquier consumidor que hoy lee el nombre de una variante (menú QR, carrito de mesa
+   y checkout, selector de producto, selector de reglas de promoción), **When** se carga tras el
+   cambio, **Then** muestra el nombre de la presentación, con el mismo texto que mostraba antes.
+6. **Given** una presentación con variantes asociadas, **When** el administrador la renombra desde
+   "Presentaciones", **Then** la operación siempre se acepta si el nombre nuevo es único en el
+   catálogo — ya no puede rechazarse por un choque con otra variante del mismo producto.
+7. **Given** una presentación con al menos una variante asociada, **When** alguien intenta
+   eliminarla del catálogo de forma física, **Then** la base de datos lo impide (no existe
+   endpoint de borrado; solo se puede desactivar, y una presentación desactivada sigue nombrando
+   las variantes que ya la usan).
+
+---
+
+### User Story 8 - La tabla de tamaños va justo debajo del encabezado, antes de "Maneja inventario" (Priority: P3)
+
+*(Enmienda 2026-09-20.)* En la tarjeta "Tamaños del producto", el interruptor "Maneja inventario"
+aparece entre el encabezado y la tabla de tamaños. Eso hace parecer que la tabla es lo que se
+habilita al activar "Maneja inventario", cuando en realidad la tabla (presentación y precio de cada
+tamaño) existe siempre que el producto tenga tamaños, con o sin inventario. Solo el bloque de
+insumos fijos y sabores de cada tamaño depende de ese interruptor.
+
+**Why this priority**: cambio de orden de presentación, sin efecto en datos ni en la API; confunde
+pero no bloquea.
+
+**Independent Test**: abrir el formulario de un producto con tamaños con "Maneja inventario"
+apagado y verificar que la tabla de tamaños se ve completa y editable justo debajo del encabezado,
+y que el interruptor "Maneja inventario" queda debajo de ella.
+
+**Acceptance Scenarios**:
+
+1. **Given** el formulario de producto con el interruptor de tamaños encendido, **When** se
+   renderiza la tarjeta "Tamaños del producto", **Then** el orden vertical es: encabezado con su
+   interruptor → tabla de tamaños con "+ Agregar tamaño" → lista de presentaciones desactivadas
+   (si hay) → "Maneja inventario" (y su aviso, si aplica) → detalle del tamaño activo.
+2. **Given** "Maneja inventario" apagado, **When** el administrador ve la tarjeta, **Then** la tabla
+   de tamaños sigue visible y editable, y solo el detalle del tamaño activo muestra el aviso "Activa
+   'Maneja inventario' arriba…", que apunta al interruptor que está justo encima.
+3. **Given** el interruptor de tamaños apagado (producto sin tamaños), **When** se renderiza la
+   tarjeta, **Then** no hay tabla, "Maneja inventario" queda justo debajo del encabezado y el
+   precio y el detalle de la única variante siguen debajo de él, sin cambio de comportamiento.
+
+---
+
+> **Enmienda 2026-09-21 (A-81) a User Story 4**: la lista de reglas es por presentación, no por
+> producto (FR-047 a FR-052); el panel de confirmación con casilla por producto desaparece. Los
+> escenarios de la historia que hablan de «una fila por producto» se leen ahora como «una regla de
+> presentación que se expande a una regla de backend por producto».
+>
+> **Enmienda 2026-09-20 (A-80) a User Story 4**: el selector "Presentación / Tamaño" del Paso 2
+> ya no depende de los productos del Paso 1: lista todas las presentaciones activas del catálogo
+> (FR-040) y la aplicación masiva empareja por presentación (FR-041). El resto de la historia
+> (casilla por producto, una fila por producto) no cambia.
+
 ### Edge Cases
 
 - ¿Qué pasa si el administrador cambia las presentaciones asociadas a la categoría después de
   crear el producto? No se modifican retroactivamente las variantes ya creadas (spec 083 FR-008,
   sin cambio) — esta spec no toca ese mecanismo de herencia por categoría.
-- ¿Qué pasa si renombrar una presentación (FR-004) haría que una de sus variantes asociadas quedara
-  con el mismo nombre que otra variante sin presentación del mismo producto? El sistema rechaza el
-  renombre completo (ninguna variante se actualiza) y le explica al administrador cuál producto y
-  variante están en conflicto — el administrador debe renombrar o asociar esa otra variante primero
-  antes de poder completar el renombre de la presentación.
-- ¿Qué pasa si una promoción `Activa` tiene su vigencia (fecha/hora) ya vencida (badge "Vencida")
-  pero su `status` sigue siendo `Activa` porque nadie la pausó ni finalizó? El botón "Configurar"
-  sigue deshabilitado (User Story 2, escenario 4) — el administrador debe pausarla o esperar a que
-  el sistema la marque `Finalizada` según las reglas ya vigentes de spec 063, no hay atajo nuevo.
-- ¿Qué pasa si, al aplicar una regla de forma masiva (User Story 4), el administrador desmarca
-  todos los productos coincidentes? El sistema no crea ninguna fila y deja la regla sin confirmar,
-  en lugar de crear una fila vacía o sin variante.
-- ¿Qué pasa si el menú de acciones de una fila (User Story 6) está abierto y el administrador
-  redimensiona la ventana o rota el dispositivo? El menú se cierra, igual que ante cualquier cambio
-  de layout que invalide su posición calculada.
-- ¿Qué pasa si el administrador quiere mover un producto de una promoción activa a otra? Debe
-  pausar la promoción activa que lo cubre primero (User Story 2); solo entonces ese producto queda
-  disponible para seleccionarse en otra promoción, porque una promoción `Pausada` deja de contar
-  para la exclusividad de User Story 5.
-- ¿Qué pasa si, en la pestaña "Promociones" del menú QR, dos reglas vigentes de la misma promoción
-  cubren distintas variantes del mismo producto? La tarjeta (User Story 3, escenario 2) muestra el
-  precio equivalente por unidad más bajo entre ellas, identificado como precio mínimo.
+- ~~¿Qué pasa si renombrar una presentación (FR-004) haría que una de sus variantes asociadas
+  quedara con el mismo nombre que otra variante sin presentación del mismo producto? El sistema
+  rechaza el renombre completo…~~ *(enmendado 2026-09-20 — el caso deja de existir: la variante no
+  guarda nombre, así que no hay nada que pueda colisionar; el renombre solo valida la unicidad del
+  nombre dentro del catálogo de presentaciones, spec 083 FR-003)*
+- ¿Qué pasa si, durante la migración de US7, dos variantes distintas de **productos distintos**
+  tenían el mismo nombre libre (p. ej. "Familiar" en dos productos)? Comparten la misma fila del
+  catálogo: la migración empareja por nombre exacto, y la unicidad `(producto, presentación)` solo
+  impide repetirla dentro del **mismo** producto — que el `UNIQUE(product_id, name)` anterior ya
+  impedía, así que no puede haber colisión.
+- ¿Qué pasa si el nombre libre de una variante existente coincide con una presentación del
+  catálogo que está desactivada? La migración reutiliza esa fila (no crea un duplicado, que
+  chocaría con `presentations.name UNIQUE`); la variante sigue funcionando y el selector del
+  formulario sigue mostrando esa presentación para esa variante aunque esté inactiva (ya lo hace
+  hoy), pero no la ofrece a otras variantes.
+- ¿Qué pasa si el administrador desactiva o renombra la presentación "Presentación única"? Las
+  variantes que ya la usan siguen mostrando su nombre actual. Al guardar un producto nuevo sin
+  tamaños, el sistema busca la presentación por el nombre literal "Presentación única" (sin
+  importar si está activa); si el administrador la renombró y no existe ninguna con ese nombre,
+  crea una nueva — no hay marca especial de "presentación del sistema".
+- ¿Qué pasa si el administrador intenta guardar un producto con tamaños y dos filas con la misma
+  presentación? Se rechaza como hoy (FR-006); ahora el mensaje se muestra sobre la fila
+  duplicada, ya que no hay un nombre distinto que la diferencie.
+- ¿Qué pasa al encender el interruptor de tamaños en un producto que tenía una sola variante
+  "Presentación única"? Se crean tres filas (Grande, Mediana, Pequeña) que heredan su precio,
+  receta y grupos de opciones; a cada una se le preselecciona la presentación del catálogo con ese
+  nombre si existe (si no, queda sin elegir y el administrador debe escogerla antes de guardar). Al
+  apagarlo, se conserva la primera fila y se reasocia a "Presentación única".
 
 ## Requirements *(mandatory)*
 
@@ -408,6 +555,15 @@ recorte ninguna opción.
 - **FR-007**: Esta asociación es opcional y no retroactiva: una variante creada antes de esta
   funcionalidad, o cuyo administrador elija no asociarla, MUST seguir funcionando exactamente igual
   que hoy (nombre libre, sin presentación vinculada), sin que el sistema la fuerce a asociarse.
+
+> **Enmienda 2026-09-20 (A-79)** — FR-001 a FR-007 se leen ahora así: FR-001 *(enmendado)*: la
+> presentación es **obligatoria**, no existe la opción "Sin presentación"; FR-002 y FR-003
+> *(enmendados)*: no se "completa" ni "actualiza" un nombre, la variante no tiene nombre propio y
+> lo muestra leyendo su presentación (FR-030); FR-004 *(reemplazado)*: sin cascada de renombre y
+> sin guarda de colisión (FR-031); FR-005 *(reemplazado)*: no hay nombre libre (FR-029); FR-006
+> *(sin cambio)*; FR-007 *(reemplazado)*: la asociación deja de ser opcional y **sí** es
+> retroactiva mediante la migración de datos de FR-033. Las secciones siguientes son la fuente
+> vigente.
 
 ### Bloqueo de configuración de promociones activas (bug 4)
 
@@ -499,15 +655,151 @@ recorte ninguna opción.
   una fila está abierto, el sistema MUST cerrar ese menú o reposicionarlo junto a su fila, de modo
   que nunca quede flotando sobre una fila distinta a la que lo abrió.
 
+### Nombre de variante derivado de la presentación (enmienda 2026-09-20, A-79)
+
+- **FR-029**: El formulario de crear o editar producto MUST NOT mostrar un campo "Nombre" para las
+  variantes: la tabla de tamaños muestra por fila solo el selector de presentación y el precio (más
+  arrastre, número y "Eliminar"). El selector MUST NOT ofrecer la opción "Sin presentación"; una
+  fila sin presentación elegida impide guardar y se señala con un mensaje sobre esa fila.
+- **FR-030**: El sistema MUST eliminar el nombre como dato propio de la variante: la columna
+  `product_variants.name` y su unicidad `(product_id, name)` desaparecen, y el nombre que ve
+  cualquier consumidor (formulario, menú QR, carrito, checkout, promociones) es
+  siempre el de la presentación asociada, leído en el momento. Toda presentación renombrada se
+  refleja de inmediato en todas sus variantes sin ningún `UPDATE` sobre `product_variants`.
+- **FR-031**: Renombrar una presentación MUST NOT ejecutar ninguna cascada sobre variantes ni
+  validar colisiones contra otras variantes; solo aplica la unicidad de nombre del catálogo de
+  presentaciones (spec 083 FR-003). Esto retira la cascada y la guarda de spec 084 FR-004.
+- **FR-032**: `product_variants.presentation_id` MUST ser obligatorio (`NOT NULL`) con integridad
+  referencial restrictiva: una presentación con variantes asociadas no puede eliminarse
+  físicamente. La unicidad `(product_id, presentation_id)` (FR-006) queda como única garantía de
+  que un producto no repita un tamaño, incluidas las variantes desactivadas.
+- **FR-033**: La migración MUST conservar el nombre visible de toda variante existente: por cada
+  variante sin presentación, empareja su nombre exacto con una fila del catálogo (creándola activa
+  si no existe, reutilizándola aunque esté desactivada) y la enlaza; las variantes que ya tenían
+  presentación no se modifican. La migración MUST ser reversible sin pérdida de datos.
+- **FR-034**: La variante de un producto sin tamaños MUST asociarse a la presentación del catálogo
+  llamada "Presentación única" (literal de A-74). El sistema MUST crearla si el tenant no la tiene,
+  tanto al guardar un producto sin tamaños como al heredar/crear la variante default; un `null` en
+  `presentation_id` dentro del payload de guardado MUST interpretarse como "usar la Presentación
+  única" (atajo de entrada; el valor guardado y devuelto nunca es nulo).
+- **FR-035**: Las variantes que un producto nuevo hereda de las presentaciones de su categoría
+  (spec 083 FR-005) MUST crearse ya asociadas a esa presentación (`presentation_id`), sin copiar
+  nombres.
+- **FR-036**: Todas las respuestas de la API que hoy devuelven el nombre de una variante MUST
+  devolver `presentation_id` y `presentation_name` en su lugar, y los payloads de guardado MUST
+  dejar de aceptar `name` para variantes. Los recibos y ventas ya emitidos no cambian (guardan su
+  descripción como texto al momento de la venta). La aplicación masiva de reglas (User Story 4)
+  sigue emparejando la variante de cada producto por la etiqueta de presentación; como el nombre
+  de cada presentación es único en el catálogo (spec 083 FR-003), es equivalente a emparejar por
+  presentación.
+
+### Presentaciones del Paso 2 de una promoción (enmienda 2026-09-20, A-80)
+
+- **FR-040**: El selector "Presentación / Tamaño" del Paso 2 MUST listar todas las presentaciones
+  activas del catálogo (spec 083), ordenadas por nombre, con o sin productos seleccionados en el
+  Paso 1, incluidas las que ningún producto usa. Las presentaciones desactivadas no se listan.
+  Esto sustituye a spec 083 FR-013 (unión de las variantes de los productos candidatos).
+- **FR-041**: Al agregar la regla, el sistema MUST emparejar, por producto ya seleccionado, la
+  variante cuya `presentation_id` sea la elegida (no por texto), y aplicar el flujo ya vigente de
+  spec 084 FR-016 a FR-019 (casilla por producto, una fila independiente por producto). Un
+  producto de una sola variante se empareja por su presentación real; ya no se le asigna la
+  etiqueta "Presentación única".
+- **FR-042**: La presentación elegida en el Paso 2 MUST conservarse al cambiar la selección de
+  productos del Paso 1.
+- **FR-043**: Con una presentación elegida, la interfaz MUST indicar a cuántos de los productos
+  seleccionados se aplicaría ("Se aplicará a N de M…"), avisar cuando no hay productos
+  seleccionados y avisar cuando ninguno la tiene; en ese último caso, agregar la regla se rechaza
+  con "Ningún producto seleccionado tiene esa presentación" (mensaje ya existente).
+- **FR-044**: La regla guardada sigue siendo una lista explícita de variantes, resuelta en el
+  momento de configurar. Una presentación que un producto reciba después NO se agrega sola a una
+  promoción ya configurada.
+
+### Reglas por presentación en el Paso 2 (enmienda 2026-09-21, A-81)
+
+- **FR-047**: La lista de reglas del Paso 2 MUST tener **una regla por presentación**, con sus
+  unidades mínimas y su precio o porcentaje, sin repetir la presentación por producto. Una
+  presentación solo admite una regla por promoción: intentar agregarla de nuevo se rechaza con un
+  mensaje que indica quitarla para cambiarla. Esto sustituye a la fila por producto de FR-017 y a
+  la casilla de exclusión por producto de FR-017/FR-018 (excluir un producto se hace en el Paso 1).
+- **FR-048**: Cambiar la selección de productos del Paso 1 (agregar o quitar) MUST NOT exigir
+  quitar ni rehacer reglas: las reglas de presentación se mantienen y se aplican a las variantes
+  de los productos seleccionados que tengan esa presentación.
+- **FR-049**: Al guardar, cada regla de presentación MUST expandirse a una regla de backend por
+  cada producto seleccionado que tenga esa presentación, con solo la variante de ese producto
+  (spec 084 FR-017/FR-019, A-77: un paquete nunca mezcla productos). El backend, su modelo y el
+  motor de descuentos no cambian.
+- **FR-050**: Se MUST poder agregar una regla de presentación aunque aún no haya productos
+  seleccionados o ninguno la tenga; la lista la marca como «sin productos seleccionados con esta
+  presentación», la interfaz avisa que no se guardará mientras siga así, y no genera reglas de
+  backend. El formulario solo es válido si al menos una regla alcanza algún producto.
+- **FR-051**: Al abrir una promoción guardada, el sistema MUST reconstruir la lista por
+  presentación agrupando las reglas guardadas de igual presentación, valor y unidades, y recuperar
+  la selección de productos de las variantes de esas reglas. Las variantes que ya no aparezcan en
+  el menú (p. ej. de un producto inactivo) no se muestran y se descartan al guardar.
+- **FR-052**: Los cambios de la selección de productos y de la lista de reglas MUST contar como
+  cambios para habilitar «Guardar y sincronizar» (FR-046).
+
+- **FR-053**: El anuncio de la promoción en el menú QR (`GET /menu/promotions`) MUST mostrar **una
+  sola línea por presentación**: las reglas de backend de una misma promoción que producen el mismo
+  texto (una por producto, por FR-049) se fusionan en una, y `variant_count` suma las variantes de
+  las reglas fusionadas. Reglas con texto distinto no se fusionan.
+
+- **FR-054** (A-82): Cuando el conjunto de una regla se nombra con **un solo nombre**, el texto de
+  condición MUST leerse «Llevando {nombre} x {n} pagas {precio}» (paquete) o «{p}% llevando
+  {nombre} x {n}» (porcentaje), p. ej. «Llevando 8 onzas x 2 pagas $12.000»; backend y réplica del
+  frontend MUST coincidir. Los conjuntos con varios nombres y los textos de cantidad mínima 1 no
+  cambian.
+- **FR-055** (A-82): La tarjeta de producto de la pestaña «Promociones» del menú QR MUST mostrar
+  solo la condición corta de la regla más barata (p. ej. «Desde 2 x $12.000»), sin el equivalente
+  por unidad («· $6.000 c/u»). Esto ajusta spec 084 FR-012/FR-013; el modal de producto conserva el
+  equivalente por unidad.
+
+### Duplicar una promoción con un nombre ya usado (enmienda 2026-09-21, A-83)
+
+- **FR-056**: Al duplicar una promoción con un nombre que ya usa otra, el sistema MUST avisar en el
+  diálogo que la existente se eliminará con todas sus reglas y ofrecer «Reemplazar y duplicar»; al
+  confirmar, MUST eliminarla y crear la copia (en Borrador, con las reglas y la vigencia de la
+  fuente) con ese nombre, de forma atómica. Sin confirmar (`replace_existing` ausente), un nombre
+  repetido sigue siendo un 409.
+- **FR-057**: Una promoción `Activa` MUST NOT reemplazarse (409: hay que pausarla antes). Duplicar
+  con el mismo nombre de la fuente la reemplaza por su copia. La promoción eliminada MUST quedar
+  registrada en auditoría.
+
+### Guardado de la configuración de una promoción (enmienda 2026-09-20)
+
+- **FR-045**: En la pantalla de configuración de una promoción, el botón "Guardar y sincronizar"
+  MUST estar al final del formulario (después de las reglas y de los mensajes de conflicto), no en
+  la cabecera. No se muestra en una promoción `Finalizada` (solo lectura).
+- **FR-046**: El botón MUST permanecer deshabilitado mientras el formulario no difiera de como se
+  abrió la configuración (nombre, fechas, días, horas y reglas; el orden de días o de variantes no
+  cuenta como cambio) y mientras no sea válido; con cualquier cambio válido se habilita, y deshacer
+  el cambio lo vuelve a deshabilitar. Sin cambios, un texto discreto lo explica ("No hay cambios
+  por guardar").
+
+### Orden de la tarjeta "Tamaños del producto" (enmienda 2026-09-20)
+
+- **FR-037**: Con el interruptor de tamaños encendido, la tabla de tamaños MUST renderizarse justo
+  debajo del encabezado de la tarjeta "Tamaños del producto" (título, descripción e interruptor),
+  antes de cualquier otro bloque.
+- **FR-038**: El interruptor "Maneja inventario" (con su descripción y el aviso de "no podrá
+  venderse…") MUST renderizarse después de la tabla de tamaños y de la lista de presentaciones
+  desactivadas, y antes del detalle del tamaño activo. Con tamaños apagados, queda justo debajo
+  del encabezado.
+- **FR-039**: El orden de FR-037/FR-038 no cambia qué se habilita con cada interruptor: la tabla de
+  tamaños (presentación y precio) está disponible con o sin "Maneja inventario"; solo el bloque de
+  insumos fijos y la parte de inventario de "Sabores a elegir" dependen de él (spec 027/064, sin
+  cambio).
+
 ### Key Entities
 
 - **Presentación**: entidad de catálogo ya existente desde spec 083, sin cambio propio; esta spec
   la conecta por primera vez con `ProductVariant` mediante una relación real (FR-001 a FR-006).
-- **Variante de producto (`ProductVariant`)**: **extiende su modelo** respecto a spec 083 (que la
-  declaraba "sin cambio"): gana una referencia opcional a una Presentación del catálogo del mismo
-  tenant. Cuando esa referencia está presente, el nombre de la variante se deriva del nombre de la
-  presentación (FR-002/FR-003/FR-004); cuando no está presente, el nombre sigue siendo libre, igual
-  que hoy. Dos variantes del mismo producto no pueden compartir la misma presentación (FR-006).
+- **Variante de producto (`ProductVariant`)**: **cambia su modelo** respecto a spec 083 (que la
+  declaraba "sin cambio"): referencia **obligatoria** a una Presentación del catálogo del mismo
+  tenant y **sin nombre propio** (enmienda 2026-09-20, FR-029 a FR-036) — su nombre es el de la
+  presentación. Dos variantes del mismo producto no pueden compartir la misma presentación
+  (FR-006). Una versión intermedia de esta spec (2026-09-17) la dejó con referencia opcional y
+  nombre sincronizado; esa versión queda sustituida.
 - **Asociación Categoría↔Presentación**: entidad ya existente desde spec 083, sin cambio; esta spec
   no la modifica ni depende de ella.
 - **Promoción / Regla / conjunto de variantes**: entidades ya existentes desde spec 063, sin cambio
@@ -538,6 +830,20 @@ recorte ninguna opción.
   listado (incluidas las filas cercanas al borde del contenedor con scroll), muestran el menú
   completo sin recortarlo ni mover la posición de scroll de la tabla.
 
+- **SC-007**: El 0% de las variantes existentes o nuevas queda sin presentación asociada tras la
+  migración de US7, y el 100% de los textos que hoy muestran el nombre de una variante (menú QR,
+  carrito de mesa, checkout, selector de producto, reglas de promoción) muestra el mismo texto que
+  mostraba antes de la migración.
+- **SC-008**: Renombrar una presentación desde el catálogo se refleja en el 100% de los productos
+  que la usan sin ejecutar ninguna escritura sobre `product_variants`.
+- **SC-009**: En el formulario de producto con tamaños, la tabla de tamaños es el primer bloque
+  bajo el encabezado de la tarjeta y "Maneja inventario" nunca aparece por encima de ella.
+- **SC-011**: Con las reglas «8 onzas × 2 = $12.000» y «12 onzas × 2 = $17.000» definidas una vez, el
+  administrador puede cambiar los productos del Paso 1 cualquier número de veces sin quitar ni
+  volver a crear ninguna regla, y la lista nunca muestra más de una regla por presentación.
+- **SC-010**: Con el Paso 1 vacío, el selector del Paso 2 muestra el 100% de las presentaciones
+  activas del catálogo; con productos seleccionados, la lista es la misma.
+
 ## Assumptions
 
 - Estos cinco bugs se corrigen sobre el comportamiento ya especificado en specs 063, 066, 081 y
@@ -564,3 +870,9 @@ recorte ninguna opción.
 - No se requiere migrar datos ni tocar promociones o reglas ya guardadas: los cambios de esta spec
   son de interfaz, flujo de captura y una relación nueva y opcional en `ProductVariant`, no
   retroactivos (Principio VII de la constitución).
+- **Enmienda 2026-09-20**: la única excepción de modelo de datos que declaraba esta sección (una
+  referencia *opcional* de `ProductVariant` a `Presentación`) queda ampliada por A-79: la
+  referencia pasa a ser obligatoria, la columna `name` se elimina y la migración sí toca datos
+  existentes (paso de datos de FR-033), a diferencia de lo que afirma la viñeta anterior sobre "no
+  migrar datos". Sigue sin tocarse ninguna promoción, regla ni el motor de cálculo. El cambio de
+  contrato de la API (FR-036) no es retrocompatible; se despliega en tres pasos (research.md D10).
