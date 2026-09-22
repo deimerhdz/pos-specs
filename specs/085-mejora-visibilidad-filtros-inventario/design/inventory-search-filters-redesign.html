@@ -1,0 +1,718 @@
+<!DOCTYPE html><html lang="es" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Inventario - Heladería Sistema de Gestión</title>
+<!-- Tailwind CSS v3 with forms and container queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f5f3ff',
+              100: '#ede9fe',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              sidebar: '#4438ca', // Deep rich indigo/violet matching screenshot
+              sidebarHover: '#3730a3',
+              sidebarActive: '#5447e6'
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style data-purpose="custom-scrollbars">
+    /* Custom refined scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-700 font-sans antialiased min-h-screen flex flex-col">
+<div class="flex flex-1 min-h-screen">
+<!-- BEGIN: Sidebar -->
+<aside class="w-64 bg-[#4a3aff] flex flex-col text-white flex-shrink-0 select-none" data-purpose="main-sidebar">
+<!-- Sidebar Brand Header -->
+<div class="px-6 py-6 flex items-center gap-3 border-b border-white/10">
+<div class="w-9 h-9 rounded-xl bg-white flex items-center justify-center shadow-sm">
+<span class="text-[#4a3aff] font-bold text-xl tracking-tight">S</span>
+</div>
+<div>
+<h1 class="font-bold text-base leading-tight tracking-tight text-white">heladeria</h1>
+<p class="text-xs text-white/70 font-normal">Sistema de Gestión</p>
+</div>
+</div>
+<!-- Navigation Links Container -->
+<nav class="flex-1 px-4 py-4 space-y-6 overflow-y-auto text-sm font-medium">
+<!-- Section: PRINCIPAL -->
+<div>
+<div class="px-3 pb-2 text-[11px] font-bold tracking-wider text-white/50 uppercase">Principal</div>
+<ul class="space-y-1">
+<li class="">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white/80 hover:bg-white/10 hover:text-white transition-colors" href="#">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="">Dashboard</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white/80 hover:bg-white/10 hover:text-white transition-colors" href="#">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="">Ventas</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white/80 hover:bg-white/10 hover:text-white transition-colors" href="#">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="">Reportes</span>
+</a>
+</li>
+</ul>
+</div>
+<!-- Section: OPERACIONES -->
+<div>
+<div class="px-3 pb-2 text-[11px] font-bold tracking-wider text-white/50 uppercase">Operaciones</div>
+<ul class="space-y-1">
+<li class="">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white/80 hover:bg-white/10 hover:text-white transition-colors" href="#">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="">Órdenes</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white/80 hover:bg-white/10 hover:text-white transition-colors" href="#">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="">Mesas</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white/80 hover:bg-white/10 hover:text-white transition-colors" href="#">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="">Terminal de mesas</span>
+</a>
+</li>
+</ul>
+</div>
+<!-- Section: CATÁLOGO -->
+<div>
+<div class="px-3 pb-2 text-[11px] font-bold tracking-wider text-white/50 uppercase">Catálogo</div>
+<ul class="space-y-1">
+<li class="">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white/80 hover:bg-white/10 hover:text-white transition-colors" href="#">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="">Carta del menú</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white/80 hover:bg-white/10 hover:text-white transition-colors" href="#">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="">Categorías</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white/80 hover:bg-white/10 hover:text-white transition-colors" href="#">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="">Presentaciones</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white/80 hover:bg-white/10 hover:text-white transition-colors" href="#">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="">Promociones</span>
+</a>
+</li>
+</ul>
+</div>
+<!-- Section: ADMINISTRACIÓN -->
+<div>
+<div class="px-3 pb-2 text-[11px] font-bold tracking-wider text-white/50 uppercase">Administración</div>
+<ul class="space-y-1">
+<li class="">
+<!-- Selected Tab Indicator -->
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/20 text-white font-semibold shadow-inner transition-colors" href="#">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="">Inventario</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white/80 hover:bg-white/10 hover:text-white transition-colors" href="#">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="">Proveedores</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white/80 hover:bg-white/10 hover:text-white transition-colors" href="#">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="">Caja</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white/80 hover:bg-white/10 hover:text-white transition-colors" href="#">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="">Usuarios</span>
+</a>
+</li>
+<li class="">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white/80 hover:bg-white/10 hover:text-white transition-colors" href="#">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="">Ajustes</span>
+</a>
+</li>
+</ul>
+</div>
+</nav>
+<!-- Sidebar Footer Version Tag -->
+<div class="px-6 py-4 text-center">
+<span class="text-xs text-white/40 font-mono tracking-wider">v1.0</span>
+</div>
+</aside>
+<!-- END: Sidebar -->
+<!-- Main Container -->
+<div class="flex-1 flex flex-col min-w-0 overflow-x-hidden bg-[#fafbfe]">
+<!-- BEGIN: TopHeader -->
+<header class="h-16 bg-white border-b border-slate-200/80 px-8 flex items-center justify-between sticky top-0 z-20" data-purpose="top-navigation">
+<!-- Breadcrumb / Header Title -->
+<div class="flex items-center gap-3">
+<button aria-label="Abrir menú lateral" class="text-slate-500 hover:text-slate-700 p-1 rounded-md transition-colors" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+<span class="text-slate-800 font-semibold text-base tracking-tight">Panel de Control</span>
+</div>
+<!-- User Profile & Notifications -->
+<div class="flex items-center gap-5">
+<!-- Notification Bell -->
+<button aria-label="Notificaciones" class="relative p-1.5 text-slate-400 hover:text-slate-600 rounded-full transition-colors" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+<!-- User Details -->
+<div class="flex items-center gap-3 pl-2">
+<div class="w-9 h-9 rounded-full bg-[#4a3aff] flex items-center justify-center text-white font-bold text-sm shadow-sm">
+              L
+            </div>
+<div class="flex flex-col text-left">
+<span class="text-sm font-semibold text-slate-800 leading-tight">leonardogomez306</span>
+<span class="text-xs font-medium text-[#4a3aff]">Administrador</span>
+</div>
+</div>
+</div>
+</header>
+<!-- END: TopHeader -->
+<!-- Main Content Area -->
+<main class="flex-1 px-8 py-7" data-purpose="inventory-page-content">
+<!-- BEGIN: PageHeading -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6" data-purpose="page-title-actions">
+<div>
+<h1 class="text-2xl font-bold text-slate-900 tracking-tight">Inventario</h1>
+<p class="text-xs sm:text-sm text-slate-500 mt-0.5">Insumos, compras y movimientos de stock</p>
+</div>
+<div>
+<button aria-label="Agregar nuevo insumo" class="inline-flex items-center gap-2 px-4 py-2.5 bg-[#4a3aff] hover:bg-[#3f30e6] text-white text-sm font-medium rounded-lg shadow-sm transition-colors focus:ring-2 focus:ring-offset-2 focus:ring-[#4a3aff]" type="button">
+<svg class="w-4 h-4 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+<span class="">Nuevo insumo</span>
+</button>
+</div>
+</div>
+<!-- END: PageHeading -->
+<!-- BEGIN: NavigationTabs -->
+<div class="border-b border-slate-200 mb-6" data-purpose="inventory-tabs">
+<nav class="flex space-x-8 -mb-px">
+<a class="border-[#4a3aff] text-[#4a3aff] whitespace-nowrap pb-3 px-1 border-b-2 font-semibold text-sm" href="#">
+              Insumos
+            </a>
+<a class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap pb-3 px-1 border-b-2 font-medium text-sm transition-colors" href="#">
+              Compras
+            </a>
+<a class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap pb-3 px-1 border-b-2 font-medium text-sm transition-colors" href="#">
+              Movimientos
+            </a>
+</nav>
+</div>
+<!-- END: NavigationTabs -->
+<!-- BEGIN: MetricsAlertCard -->
+<div class="mb-6 max-w-xs" data-purpose="summary-metric-card">
+<div class="bg-[#fffbeb] border border-amber-200/80 rounded-xl px-5 py-4 shadow-sm">
+<div class="text-[11px] font-bold tracking-wider text-amber-700 uppercase">Bajo mínimo</div>
+<div class="text-2xl font-bold text-amber-700 mt-1">0</div>
+</div>
+</div>
+<!-- END: MetricsAlertCard -->
+<!-- BEGIN: FilterToolbar (Redesigned Action Bar) -->
+
+<!-- END: FilterToolbar -->
+<!-- BEGIN: InventoryDataTable -->
+<div class="bg-white rounded-xl shadow-sm border border-slate-200/80 overflow-hidden" data-purpose="inventory-table-container"><div class="flex items-center justify-between gap-4 p-4 border-b border-gray-200 bg-gray-50/50" data-purpose="table-card-header">
+  <div class="relative flex-1 max-w-md">
+    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+      </svg>
+    </div>
+    <input class="w-full pl-10 pr-12 py-2 bg-white text-slate-800 placeholder-slate-400 text-sm rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#4a3aff]/30 focus:border-[#4a3aff] shadow-sm transition-all" placeholder="Buscar por nombre..." type="text">
+    <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+      <span class="text-[11px] bg-slate-100 text-slate-500 font-mono px-1.5 py-0.5 rounded border border-slate-200 font-medium">⌘K</span>
+    </div>
+  </div>
+  <div class="flex items-center gap-3">
+    <div class="relative">
+      <select class="appearance-none border border-gray-300 bg-white hover:bg-slate-50 text-slate-700 font-medium pl-3 pr-8 py-2 rounded-lg text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#4a3aff]/30 focus:border-[#4a3aff] shadow-sm transition-colors">
+        <option selected="">Tipo: Todos</option>
+        <option value="empacado">Empacado</option>
+        <option value="materia_prima">Materia prima</option>
+      </select>
+      <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-400">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+        </svg>
+      </div>
+    </div>
+    <div class="relative">
+      <select class="appearance-none border border-gray-300 bg-white hover:bg-slate-50 text-slate-700 font-medium pl-3 pr-8 py-2 rounded-lg text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#4a3aff]/30 focus:border-[#4a3aff] shadow-sm transition-colors">
+        <option selected="">Estado: Activos e inactivos</option>
+        <option value="activos">Solo activos</option>
+        <option value="inactivos">Solo inactivos</option>
+      </select>
+      <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-400">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+        </svg>
+      </div>
+    </div>
+    <div class="flex items-center bg-gray-100 text-gray-600 text-xs font-medium px-2.5 py-1 rounded-full border border-gray-200 whitespace-nowrap">
+      <span class="">20 Insumos</span>
+    </div>
+  </div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse text-xs sm:text-sm">
+<thead>
+<tr class="border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider bg-slate-50/50">
+<th class="py-3.5 px-5" scope="col">Nombre</th>
+<th class="py-3.5 px-4" scope="col">Tipo</th>
+<th class="py-3.5 px-4" scope="col">Unidad</th>
+<th class="py-3.5 px-4 text-right" scope="col">Stock</th>
+<th class="py-3.5 px-4 text-right" scope="col">Mínimo</th>
+<th class="py-3.5 px-4 text-right" scope="col">Costo</th>
+<th class="py-3.5 px-4 text-center" scope="col">Estado</th>
+<th class="py-3.5 px-5 text-right" scope="col">Acciones</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 text-slate-600 font-normal">
+<!-- Row 1: Agua 500ml -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Agua 500ml</td>
+<td class="py-3 px-4 text-slate-600">Empacado</td>
+<td class="py-3 px-4 text-slate-500">und</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">100</td>
+<td class="py-3 px-4 text-slate-500 text-right">10</td>
+<td class="py-3 px-4 text-slate-600 text-right">1,500.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 2: Arequipe -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Arequipe</td>
+<td class="py-3 px-4 text-slate-600">Materia prima</td>
+<td class="py-3 px-4 text-slate-500">g</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">4,920</td>
+<td class="py-3 px-4 text-slate-500 text-right">500</td>
+<td class="py-3 px-4 text-slate-600 text-right">15.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 3: Banano -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Banano</td>
+<td class="py-3 px-4 text-slate-600">Materia prima</td>
+<td class="py-3 px-4 text-slate-500">und</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">299</td>
+<td class="py-3 px-4 text-slate-500 text-right">200</td>
+<td class="py-3 px-4 text-slate-600 text-right">600.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 4: Barquillo -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Barquillo</td>
+<td class="py-3 px-4 text-slate-600">Materia prima</td>
+<td class="py-3 px-4 text-slate-500">und</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">494</td>
+<td class="py-3 px-4 text-slate-500 text-right">200</td>
+<td class="py-3 px-4 text-slate-600 text-right">300.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 5: Brownie -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Brownie</td>
+<td class="py-3 px-4 text-slate-600">Materia prima</td>
+<td class="py-3 px-4 text-slate-500">und</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">26</td>
+<td class="py-3 px-4 text-slate-500 text-right">5</td>
+<td class="py-3 px-4 text-slate-600 text-right">2,600.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 6: Café -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Café</td>
+<td class="py-3 px-4 text-slate-600">Materia prima</td>
+<td class="py-3 px-4 text-slate-500">g</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">4,880</td>
+<td class="py-3 px-4 text-slate-500 text-right">500</td>
+<td class="py-3 px-4 text-slate-600 text-right">15.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 7: Cereal -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Cereal</td>
+<td class="py-3 px-4 text-slate-600">Materia prima</td>
+<td class="py-3 px-4 text-slate-500">g</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">3,000</td>
+<td class="py-3 px-4 text-slate-500 text-right">200</td>
+<td class="py-3 px-4 text-slate-600 text-right">12.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 8: Cereza -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Cereza</td>
+<td class="py-3 px-4 text-slate-600">Materia prima</td>
+<td class="py-3 px-4 text-slate-500">g</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">490</td>
+<td class="py-3 px-4 text-slate-500 text-right">200</td>
+<td class="py-3 px-4 text-slate-600 text-right">28.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 9: Chicle -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Chicle</td>
+<td class="py-3 px-4 text-slate-600">Materia prima</td>
+<td class="py-3 px-4 text-slate-500">g</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">4,920</td>
+<td class="py-3 px-4 text-slate-500 text-right">500</td>
+<td class="py-3 px-4 text-slate-600 text-right">15.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 10: Chocolate -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Chocolate</td>
+<td class="py-3 px-4 text-slate-600">Materia prima</td>
+<td class="py-3 px-4 text-slate-500">g</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">4,920</td>
+<td class="py-3 px-4 text-slate-500 text-right">500</td>
+<td class="py-3 px-4 text-slate-600 text-right">15.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 11: Combinado -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Combinado</td>
+<td class="py-3 px-4 text-slate-600">Materia prima</td>
+<td class="py-3 px-4 text-slate-500">g</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">5,000</td>
+<td class="py-3 px-4 text-slate-500 text-right">500</td>
+<td class="py-3 px-4 text-slate-600 text-right">15.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 12: concha -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">concha</td>
+<td class="py-3 px-4 text-slate-600">Empacado</td>
+<td class="py-3 px-4 text-slate-500">und</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">300</td>
+<td class="py-3 px-4 text-slate-500 text-right">5</td>
+<td class="py-3 px-4 text-slate-600 text-right">400.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 13: Crema chantilly -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Crema chantilly</td>
+<td class="py-3 px-4 text-slate-600">Materia prima</td>
+<td class="py-3 px-4 text-slate-500">g</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">3,000</td>
+<td class="py-3 px-4 text-slate-500 text-right">200</td>
+<td class="py-3 px-4 text-slate-600 text-right">24.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 14: cucharas -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">cucharas</td>
+<td class="py-3 px-4 text-slate-600">Empacado</td>
+<td class="py-3 px-4 text-slate-500">und</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">300</td>
+<td class="py-3 px-4 text-slate-500 text-right">20</td>
+<td class="py-3 px-4 text-slate-600 text-right">39.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 15: Fresa -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Fresa</td>
+<td class="py-3 px-4 text-slate-600">Materia prima</td>
+<td class="py-3 px-4 text-slate-500">g</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">4,996</td>
+<td class="py-3 px-4 text-slate-500 text-right">500</td>
+<td class="py-3 px-4 text-slate-600 text-right">15.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 16: Frutos rojos -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Frutos rojos</td>
+<td class="py-3 px-4 text-slate-600">Materia prima</td>
+<td class="py-3 px-4 text-slate-500">g</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">5,000</td>
+<td class="py-3 px-4 text-slate-500 text-right">500</td>
+<td class="py-3 px-4 text-slate-600 text-right">15.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 17: Galleta -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Galleta</td>
+<td class="py-3 px-4 text-slate-600">Materia prima</td>
+<td class="py-3 px-4 text-slate-500">und</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">100</td>
+<td class="py-3 px-4 text-slate-500 text-right">20</td>
+<td class="py-3 px-4 text-slate-600 text-right">94.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 18: Gaseosa 400ml -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Gaseosa 400ml</td>
+<td class="py-3 px-4 text-slate-600">Empacado</td>
+<td class="py-3 px-4 text-slate-500">und</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">94</td>
+<td class="py-3 px-4 text-slate-500 text-right">10</td>
+<td class="py-3 px-4 text-slate-600 text-right">2,500.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 19: Helado -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Helado</td>
+<td class="py-3 px-4 text-slate-600">Materia prima</td>
+<td class="py-3 px-4 text-slate-500">g</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">9,973</td>
+<td class="py-3 px-4 text-slate-500 text-right">1,000</td>
+<td class="py-3 px-4 text-slate-600 text-right">12.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+<!-- Row 20: Lecherita -->
+<tr class="hover:bg-slate-50/80 transition-colors">
+<td class="py-3 px-5 font-semibold text-slate-800">Lecherita</td>
+<td class="py-3 px-4 text-slate-600">Materia prima</td>
+<td class="py-3 px-4 text-slate-500">g</td>
+<td class="py-3 px-4 font-bold text-slate-900 text-right">3,000</td>
+<td class="py-3 px-4 text-slate-500 text-right">200</td>
+<td class="py-3 px-4 text-slate-600 text-right">15.00</td>
+<td class="py-3 px-4 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">OK</span>
+</td>
+<td class="py-3 px-5 text-right whitespace-nowrap space-x-2 text-xs">
+<button class="text-amber-600 hover:text-amber-700 font-medium">Ajustar</button>
+<button class="text-slate-600 hover:text-slate-900 font-medium">Kardex</button>
+<button class="text-blue-600 hover:text-blue-700 font-medium">Editar</button>
+<button class="text-slate-500 hover:text-red-600 font-medium">Desactivar</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- BEGIN: PaginationFooter -->
+<div class="px-6 py-3.5 bg-white border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500" data-purpose="table-pagination">
+<div class="flex items-center gap-2">
+<span class="">Por página</span>
+<div class="relative">
+<select class="appearance-none border border-slate-300 rounded px-2.5 py-1 pr-6 bg-white text-slate-700 text-xs focus:ring-1 focus:ring-[#4a3aff] focus:border-[#4a3aff] cursor-pointer">
+<option selected="">20</option>
+<option>50</option>
+<option>100</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 text-slate-500">
+<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="">Página 1 de 3</span>
+<div class="inline-flex items-center gap-1.5">
+<button class="px-3 py-1.5 rounded border border-slate-200 bg-slate-50/50 text-slate-400 cursor-not-allowed font-medium transition-colors" disabled="" type="button">
+                  Anterior
+                </button>
+<button class="px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-medium transition-colors shadow-xs" type="button">
+                  Siguiente
+                </button>
+</div>
+</div>
+</div>
+<!-- END: PaginationFooter -->
+</div>
+<!-- END: InventoryDataTable -->
+</main>
+</div>
+</div>
+
+
+</body></html>
