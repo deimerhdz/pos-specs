@@ -1,73 +1,37 @@
 <!--
 Sync Impact Report
 ===================
-Versión: 2.0.0 → 3.0.0
+Versión: 3.0.0 → 4.0.0
 
-Tipo de cambio: MAJOR. Cierra la fase de modernización (además de la fase de documentación,
-ya cerrada desde la v2.0.0) y abre la fase de **EVOLUCIÓN FUNCIONAL**. Redefine de forma
-incompatible el sentido de varios principios existentes y retira uno de ellos (III), lo que
-por sí solo exige un bump MAJOR según la política de versionado de este mismo documento.
+Tipo de cambio: MAJOR. Añade gobernanza de Git (dos principios nuevos) y, al hacerlo,
+redefine de forma incompatible el Principio XIII: los mensajes de commit dejan de estar
+sujetos al mandato de español de Colombia y pasan a escribirse en inglés. Esa redefinición
+por sí sola exige un bump MAJOR según la política de versionado de este mismo documento,
+aunque el resto del cambio (dos principios nuevos) sería solo MINOR.
 
 Principios modificados (redefinidos, no solo renombrados):
-  - I. El Comportamiento Sigue Siendo Sagrado (por Defecto) → II. El Comportamiento
-    Existente Sigue Protegido — REDEFINIDO. Se mantiene la exigencia de decisión de negocio
-    registrada (quién/cuándo), pero ahora exige además explicitar qué comportamiento
-    cambia, por qué, y qué funcionalidades se ven afectadas — y el vehículo del cambio deja
-    de ser "una corrección de modernización" para ser "un spec funcional aprobado".
-  - II. Los Characterization Tests son el Árbitro → III. Los Characterization Tests
-    Protegen el Comportamiento Heredado — REDEFINIDO. Se mantiene el veto sobre modificar
-    tests `"CONGELA comportamiento actual:"` sin autorización, pero ahora exige además que
-    exista un spec del nuevo comportamiento y evidencia de que otros comportamientos
-    protegidos no se ven afectados negativamente.
-  - IV. Dependencias Nuevas Permitidas con Justificación → IX. Dependencias Nuevas
-    Permitidas con Justificación — REDEFINIDO (ampliado). Ahora exige, además de la
-    justificación en la spec, listar explícitamente alternativas consideradas e impacto
-    sobre mantenimiento, seguridad y despliegue.
-  - V. Ningún Cambio Retroactivo → VII. Compatibilidad con Datos Históricos — REDEFINIDO
-    (ampliado). Ya no solo protege el importe de facturas emitidas: también prohíbe cambiar
-    su representación histórica o aplicarles nuevas reglas de negocio con efecto
-    retroactivo, y acota expresamente las reglas nuevas al ámbito temporal que defina cada
-    spec.
-  - VI. Todo en Español de Colombia → XIII. Todo en Español de Colombia — SIN CAMBIO DE
-    FONDO, solo renumerado. No formaba parte de las reglas específicas de la fase de
-    modernización, así que la enmienda no lo toca.
+  - XIII. Todo en Español de Colombia — REDEFINIDO. Se mantiene el mandato de español de
+    Colombia para documentación, registro de anomalías, nombres de tests de
+    characterization, comentarios y artefactos de esta fase, pero se retira a los mensajes
+    de commit de ese mandato: quedan exceptuados junto con los nombres de rama de Git, que
+    ahora se escriben en inglés conforme a los nuevos Principios XIV y XV.
 
-Principios retirados:
-  - III. Estrangulamiento antes que Reescritura — retirado como principio independiente.
-    Era específico de la modernización de código legado (extracción módulo por módulo). Su
-    exigencia de no mezclar cambios grandes y verificar de forma aislada queda absorbida,
-    para el contexto de nueva funcionalidad, por el nuevo Principio VI (Evolución
-    Incremental) — que ya no habla de "extracción de módulo legado" sino de no mezclar
-    nuevas funcionalidades, refactors, arquitectura, migraciones y cambios de
-    comportamiento en un mismo incremento.
+Principios añadidos (nuevos, formalizan la gobernanza de Git del proyecto):
+  - XIV. Estrategia y Convención de Ramas Git
+  - XV. Política de Commits Git
 
-Principios añadidos (nuevos, formalizan las reglas de la fase de evolución funcional):
-  - I. Las Nuevas Funcionalidades Nacen de un Spec
-  - IV. Los Nuevos Specs Pueden Introducir Nuevo Comportamiento
-  - V. Nuevas Funcionalidades Antes que Refactorizaciones Oportunistas
-  - VI. Evolución Incremental
-  - VIII. Evolución del Modelo de Datos
-  - X. Verificación Obligatoria
-  - XI. Decisiones de Negocio Frente a Decisiones Técnicas
-  - XII. Trazabilidad
+Principios retirados: ninguno.
 
 Secciones reescritas:
-  - Alcance del Proyecto y de esta Fase → actualizada de fase de modernización a fase de
-    evolución funcional (alcance, entregables y límites de esta nueva fase; los dos
-    repositorios en producción no cambian).
-  - Flujo de Trabajo de Modernización → renombrada y reescrita como Flujo de Trabajo de
-    Evolución Funcional (spec antes que código, protección de tests de characterization,
-    verificación obligatoria, trazabilidad, y el criterio de cuándo un spec se considera
-    completado).
+  - Flujo de Trabajo de Evolución Funcional → se añaden dos viñetas nuevas que referencian
+    los Principios XIV y XV, sin alterar las viñetas existentes.
 
-Secciones añadidas:
-  - Principio Rector de esta Fase — preámbulo que contrasta el mandato de la modernización
-    ("preservar el sistema existente") con el de la evolución funcional ("cambiar el
-    sistema de forma intencionada, especificada y verificable"), y cierra con la regla que
-    gobierna toda esta fase: la ausencia de un spec no autoriza un cambio funcional.
+Secciones añadidas: ninguna nueva a nivel de encabezado; se amplían Principios
+Fundamentales, Flujo de Trabajo de Evolución Funcional y Gobernanza.
 
-Secciones sin cambios estructurales: Gobernanza (actualizada en fechas, versión y en el
-número/lista de principios referenciados en la revisión de cumplimiento).
+Secciones sin cambios estructurales: Principio Rector de esta Fase; Alcance del Proyecto y
+de esta Fase (la gobernanza de Git aplica a todo el proyecto, no solo a esta fase, pero no
+modifica el alcance funcional declarado en esa sección).
 
 Plantillas dependientes:
   - .specify/templates/plan-template.md → pendiente de revisión manual (no verificado en
@@ -79,10 +43,7 @@ Plantillas dependientes:
 
 TODOs / seguimiento pendiente: ninguno nuevo. La fecha de ratificación original
 (2026-08-15) se conserva sin cambios; esta enmienda solo actualiza la fecha de última
-modificación. El documento que podría "sustituir oficialmente" a
-`registro-de-anomalias.md` (mencionado como posibilidad por la propia enmienda) no existe
-hoy — se sigue citando ese fichero como el libro de autorizaciones vigente hasta que un
-documento sucesor se declare explícitamente.
+modificación.
 -->
 
 # Constitución del Sistema POS — Pedidos de Mesa por QR e Inventario
@@ -240,15 +201,51 @@ solo al "por qué se corrigió algo".
 
 ### XIII. Todo en Español de Colombia
 Toda la documentación, el registro de anomalías, los nombres de tests de
-characterization, los mensajes de commit relacionados con esta evolución, los comentarios
-y cualquier artefacto producido en esta fase se escriben en español de Colombia
-(vocabulario y convenciones propias de Colombia, no español neutro ni de otra región).
+characterization, los comentarios y cualquier artefacto producido en esta fase se
+escriben en español de Colombia (vocabulario y convenciones propias de Colombia, no
+español neutro ni de otra región). Los mensajes de commit y los nombres de rama de Git
+quedan exceptuados de este mandato: se escriben en inglés, conforme a los Principios XIV
+y XV.
 
-**Razón**: es el idioma y la variedad dialectal del resto del proyecto (código, commits,
+**Razón**: es el idioma y la variedad dialectal del resto del proyecto (código,
 documentación previa) y del negocio y sus usuarios. Mantener la variedad específica evita
 fricción de términos que en otras regiones hispanohablantes tienen sentidos distintos,
 justo en los puntos donde la precisión importa más (specs, decisiones de negocio,
-criterios de aceptación).
+criterios de aceptación). Los mensajes de commit y las ramas de Git son la excepción
+porque siguen un estándar internacional (Conventional Commits) pensado para revisarse en
+inglés independientemente del idioma del equipo — mezclar ambos idiomas en el mismo
+artefacto sería más confuso que consistente.
+
+### XIV. Estrategia y Convención de Ramas Git
+Antes de iniciar cualquier modificación de código — tanto en `pos-backend` como en
+`pos-heladeria` — se crea una nueva rama partiendo de la rama en la que se encuentre el
+asistente en ese momento. El nombre de la rama se escribe en inglés y sigue estrictamente
+la estructura `<tipo>/<numero_spec>-<nombre_spec>`, donde `<tipo>` es uno de `feat`,
+`fix`, `style`, `refactor`, `chore` u otro tipo Conventional Commits equivalente,
+`<numero_spec>` es el número de la spec que origina el cambio, y `<nombre_spec>` es un
+nombre corto en inglés y en kebab-case que identifica la funcionalidad. Ejemplos válidos:
+`feat/080-orders-module`, `fix/091-date-picker-bug`, `style/092-inventory-action-bar`.
+
+**Razón**: crear la rama antes de tocar código, y no después, evita que cambios de
+distintas specs se mezclen sobre la misma rama de trabajo; el nombre estructurado permite
+identificar, solo con `git branch`, a qué spec pertenece cada rama en curso, sin tener que
+abrir el historial de commits.
+
+### XV. Política de Commits Git
+Los commits se ejecutan únicamente cuando el usuario lo solicita de forma explícita — el
+asistente nunca commitea cambios por iniciativa propia. Está prohibido agrupar todos los
+cambios en un único commit gigante: los cambios se seccionan en commits pequeños,
+enfocados y lógicos, agrupados por unidad de cambio coherente. Todos los mensajes de
+commit se escriben estrictamente en inglés, siguiendo la convención Conventional Commits
+(`feat:`, `fix:`, `refactor:`, `style:`, `chore:`, etc.). Ningún commit incluye texto,
+firma o metadato que indique que fue realizado o asistido por inteligencia artificial (se
+omiten líneas como "Co-authored-by:" o "Generated by AI").
+
+**Razón**: commitear solo bajo pedido explícito evita que el historial de git registre
+estados intermedios que el usuario no quiso conservar; la atomicidad hace que cada commit
+pueda revisarse y revertirse de forma independiente; y el estándar de idioma e higiene de
+autoría mantiene el historial de ambos repositorios consistente con el resto del proyecto
+en producción, sin marcas que no aportan valor a quien lo audite después.
 
 ## Alcance del Proyecto y de esta Fase
 
@@ -324,8 +321,15 @@ representación — de facturas ya emitidas (Principio VII).
 - Cuando el comportamiento heredado entra en conflicto con una necesidad de negocio nueva,
   el spec lo hace explícito y registra cuál de las dos decisiones prevalece y por qué
   (Principio XI).
-- Toda spec, registro de anomalías, nombre de test de characterization y mensaje de commit
-  relacionado con esta fase se escribe en español de Colombia (Principio XIII).
+- Toda spec, registro de anomalías, nombre de test de characterization y comentario
+  relacionado con esta fase se escribe en español de Colombia; los mensajes de commit y
+  los nombres de rama son la excepción y se escriben en inglés (Principio XIII).
+- Antes de tocar código en `pos-backend` o `pos-heladeria`, se crea una rama nueva desde
+  la rama actual, con nombre en inglés y estructura `<tipo>/<numero_spec>-<nombre_spec>`
+  (Principio XIV).
+- Los commits solo se ejecutan cuando el usuario lo pide explícitamente, en unidades
+  pequeñas y lógicas, con mensajes en inglés bajo Conventional Commits y sin ninguna
+  marca de autoría o asistencia de inteligencia artificial (Principio XV).
 
 **Un spec se considera completado cuando**: el comportamiento esperado está definido; los
 criterios de aceptación están satisfechos; la implementación está terminada; los tests
@@ -343,7 +347,7 @@ repositorio de specs (`pos-specs`) en caso de conflicto. No rige el código fuen
 código durante esta fase.
 
 **Enmiendas**: cualquier cambio a esta constitución (incluyendo alterar, debilitar o
-eliminar alguno de sus trece principios) requiere una decisión explícita y por escrito,
+eliminar alguno de sus quince principios) requiere una decisión explícita y por escrito,
 registrada en el propio commit o PR que modifica este fichero, con la razón del cambio.
 
 **Versionado**: este documento usa versionado semántico (`MAJOR.MINOR.PATCH`):
@@ -355,7 +359,7 @@ registrada en el propio commit o PR que modifica este fichero, con la razón del
 
 **Revisión de cumplimiento**: cualquier trabajo producido bajo esta fase (specs
 funcionales, decisiones de negocio, characterization tests, implementaciones) debe poder
-verificarse contra los trece principios antes de considerarse completo. En particular:
+verificarse contra los quince principios antes de considerarse completo. En particular:
 toda funcionalidad nueva tiene un spec previo (Principio I); todo cambio de comportamiento
 existente tiene una decisión de negocio citada con quién y cuándo (Principio II); ningún
 test `"CONGELA comportamiento actual:"` en rojo queda sin decisión que lo ampare
@@ -364,8 +368,11 @@ test `"CONGELA comportamiento actual:"` en rojo queda sin decisión que lo ampar
 ninguna factura ya emitida fue alterada en importe o representación (Principio VII);
 ninguna migración de datos carece de estrategia de compatibilidad y rollback
 (Principio VIII); toda dependencia nueva está justificada y aprobada (Principio IX);
-ninguna funcionalidad se da por completa sin verificación (Principio X); y toda la cadena
+ninguna funcionalidad se da por completa sin verificación (Principio X); toda la cadena
 Necesidad → Spec → Decisión → Implementación → Tests → Verificación es rastreable
-(Principio XII).
+(Principio XII); ninguna rama de trabajo se crea sin seguir la convención
+`<tipo>/<numero_spec>-<nombre_spec>` (Principio XIV); y ningún commit se realiza sin
+pedido explícito del usuario, fuera de unidades atómicas, en un idioma distinto al
+inglés, o con marcas de autoría de inteligencia artificial (Principio XV).
 
-**Version**: 3.0.0 | **Ratified**: 2026-08-15 | **Last Amended**: 2026-08-18
+**Version**: 4.0.0 | **Ratified**: 2026-08-15 | **Last Amended**: 2026-09-22
