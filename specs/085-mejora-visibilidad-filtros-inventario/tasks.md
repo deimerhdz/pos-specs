@@ -54,13 +54,13 @@ insumos).
 **Purpose**: Confirmar el punto de partida (iteración anterior aún en el código) antes de
 reemplazarlo por el diseño fusionado vigente
 
-- [ ] T001 Verificar checkout de la rama `feat/085-improve-inventory-filters-visibility` en
+- [X] T001 Verificar checkout de la rama `feat/085-improve-inventory-filters-visibility` en
   `pos-heladeria` y que las dependencias estén instaladas (`npm install` si hace falta)
-- [ ] T002 Ejecutar `npm test` (`ng test`) en `pos-heladeria` como línea base de esta
+- [X] T002 Ejecutar `npm test` (`ng test`) en `pos-heladeria` como línea base de esta
   iteración: confirmar que `inventory-page.component.spec.ts` pasa en verde antes de
   modificar el bloque de filtros/tabla, para poder atribuir cualquier falla posterior
   exclusivamente a este cambio
-- [ ] T003 Ejecutar `npm start` (`ng serve`) en `pos-heladeria`, navegar a **Inventario →
+- [X] T003 Ejecutar `npm start` (`ng serve`) en `pos-heladeria`, navegar a **Inventario →
   pestaña "Insumos"** y confirmar visualmente el estado actual (iteración anterior): la zona
   de filtros (`inventory-page.component.ts` líneas 111-131, `bg-indigo-50/40 rounded-xl
   border border-indigo-100 p-4 flex flex-wrap gap-3`) es hoy una tarjeta **separada**,
@@ -93,7 +93,7 @@ sin necesidad de ningún otro cambio de la spec (spec.md, Historia 1).
 
 ### Implementation for User Story 1
 
-- [ ] T004 [US1] Eliminar el `<div>` de filtros como hermano separado de la tabla (`bg-indigo-50/40
+- [X] T004 [US1] Eliminar el `<div>` de filtros como hermano separado de la tabla (`bg-indigo-50/40
   rounded-xl border border-indigo-100 p-4 flex flex-wrap gap-3`, líneas 111-131 de
   `pos-heladeria/src/app/modules/inventory/pages/inventory-page.component.ts`) e insertar su
   contenido (buscador + 2 selects) como primer hijo del `<div>` de la tabla (línea 134),
@@ -101,18 +101,21 @@ sin necesidad de ningún otro cambio de la spec (spec.md, Historia 1).
   border-b border-gray-200 bg-gray-50/50 flex-wrap">` (replica `data-purpose="table-card-header"`
   del mockup, con `flex-wrap` añadido para FR-006), sin modificar ningún `[ngModel]`,
   `(ngModelChange)` ni `<option>` de los tres controles (FR-001; research.md punto 1)
-- [ ] T005 [US1] Actualizar las clases del `<div>` contenedor de la tabla (línea 134 antes de
+- [X] T005 [US1] Actualizar las clases del `<div>` contenedor de la tabla (línea 134 antes de
   T004) de `bg-white rounded-xl border border-gray-100 overflow-hidden` a `bg-white
   rounded-xl shadow-sm border border-slate-200/80 overflow-hidden` (mockup), en
   `pos-heladeria/src/app/modules/inventory/pages/inventory-page.component.ts`, para que la
   tarjeta fusionada (encabezado + tabla) se distinga con más peso visual del fondo de la
   página y de sus vecinos (encabezado, tarjeta "Bajo mínimo") (FR-001; research.md punto 4)
   — depende de T004
-- [ ] T006 [US1] Validación manual siguiendo quickstart.md sección "Historia 1" (pasos 1-3):
+- [X] T006 [US1] Validación manual siguiendo quickstart.md sección "Historia 1" (pasos 1-3):
   confirmar que la zona de búsqueda y filtros, ya fusionada como encabezado de la tarjeta de
   tabla, se distingue a simple vista del encabezado, de la tarjeta "Bajo mínimo" y de las
   filas de la tabla, incluyendo cuando "Bajo mínimo" está activo como filtro (Acceptance
   Scenarios 1-2; Edge case de "Bajo mínimo" activo) — depende de T004, T005
+  > Validado en el navegador (tab logueado en `heladeria.localhost:4200/dashboard/inventario`):
+  > la zona fusionada se distingue del encabezado y de la tarjeta "Bajo mínimo" tanto en
+  > estado normal como con "Bajo mínimo" activo como filtro (sin competir visualmente).
 
 **Checkpoint**: En este punto, la Historia de Usuario 1 debe ser completamente funcional y
 verificable de forma independiente (la zona fusionada ya se distingue del resto de la
@@ -133,7 +136,7 @@ identifica correctamente cada control sin dudar (spec.md, Historia 2).
 
 ### Implementation for User Story 2
 
-- [ ] T007 [US2] Envolver el buscador en `<div class="relative flex-1 max-w-md">` (agrupación
+- [X] T007 [US2] Envolver el buscador en `<div class="relative flex-1 max-w-md">` (agrupación
   a la izquierda del encabezado fusionado de T004) y actualizar las clases del `<input>` a
   `w-full pl-10 pr-3 py-2 bg-white text-slate-800 placeholder-slate-400 text-sm rounded-lg
   border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#4a3aff]/30
@@ -143,11 +146,11 @@ identifica correctamente cada control sin dudar (spec.md, Historia 2).
   `(ngModelChange)="onSearchInput($event)"`, `type="text"` ni el `placeholder="Buscar por
   nombre..."`, en `pos-heladeria/src/app/modules/inventory/pages/inventory-page.component.ts`
   (FR-002; research.md punto 3) — depende de T004
-- [ ] T008 [US2] Agrupar los dos `<select>` a la derecha del encabezado fusionado dentro de
+- [X] T008 [US2] Agrupar los dos `<select>` a la derecha del encabezado fusionado dentro de
   `<div class="flex items-center gap-3 flex-wrap">`, en
   `pos-heladeria/src/app/modules/inventory/pages/inventory-page.component.ts` (FR-003;
   research.md punto 4) — depende de T004
-- [ ] T009 [US2] Envolver el `<select>` de tipo de insumo en `<div class="relative">`,
+- [X] T009 [US2] Envolver el `<select>` de tipo de insumo en `<div class="relative">`,
   actualizar sus clases a `appearance-none border border-gray-300 bg-white hover:bg-slate-50
   text-slate-700 font-medium pl-3 pr-8 py-2 rounded-lg text-sm cursor-pointer
   focus:outline-none focus:ring-2 focus:ring-[#4a3aff]/30 focus:border-[#4a3aff] shadow-sm
@@ -158,16 +161,27 @@ identifica correctamente cada control sin dudar (spec.md, Historia 2).
   ni las `<option>`, en
   `pos-heladeria/src/app/modules/inventory/pages/inventory-page.component.ts` (FR-003;
   research.md punto 4) — depende de T008
-- [ ] T010 [US2] Repetir el mismo tratamiento de T009 (wrapper `relative`, clases del select,
+  > **Desviación necesaria**: se usó `<app-mi-icon name="expand_more" [size]="16">` en vez del
+  > SVG artesanal indicado. `inventory-page.component.spec.ts` (spec 082) tiene una
+  > aserción `expect(el.querySelector('svg')).toBeNull()` sobre **todo** el componente (no
+  > solo el botón "Nuevo insumo"); el `<svg>` de la flecha literal, aunque replica el mockup,
+  > rompía ese test existente. `expand_more` ya está en `ICON_CATALOG` (línea 79) con la
+  > semántica correcta (chevron abajo) — se preserva el comportamiento protegido (Principio
+  > II) sin perder fidelidad visual al mockup.
+- [X] T010 [US2] Repetir el mismo tratamiento de T009 (wrapper `relative`, clases del select,
   flecha SVG) para el `<select>` de estado, sin modificar `[ngModel]="service.itemsActive()"`,
   `(ngModelChange)="onActiveFilterChange($event)"` ni las `<option>`, en
   `pos-heladeria/src/app/modules/inventory/pages/inventory-page.component.ts` (FR-003;
   research.md punto 4) — depende de T008
-- [ ] T011 [US2] Validación manual siguiendo quickstart.md sección "Historia 2" (pasos 1-3):
+  > Misma desviación que T009: `<app-mi-icon name="expand_more" [size]="16">` en vez de SVG.
+- [X] T011 [US2] Validación manual siguiendo quickstart.md sección "Historia 2" (pasos 1-3):
   confirmar que el campo de búsqueda se percibe como lugar para escribir texto de búsqueda, y
   que cada selector ("Tipo de insumo", "Estado") se percibe como control de filtro
   independiente, separado del buscador y entre sí (Acceptance Scenarios 1-2) — depende de
   T007, T009, T010
+  > Validado en el navegador: buscador con ícono de lupa y acento `#4a3aff` al enfocar,
+  > cada select con flecha `expand_more` y hover propio — se perciben como tres controles
+  > independientes.
 
 **Checkpoint**: En este punto, las Historias 1 y 2 deben funcionar juntas: la zona fusionada
 se ubica de un vistazo y, dentro de ella, cada control se distingue con claridad.
@@ -179,44 +193,74 @@ se ubica de un vistazo y, dentro de ella, cada control se distingue con claridad
 **Purpose**: Verificaciones transversales de accesibilidad, alcance (FR-009) y no-regresión
 que aplican al cambio completo (Historias 1 y 2 combinadas)
 
-- [ ] T012 [P] Confirmar que la zona reforzada **no** incluye el badge "⌘K" dentro del campo
+- [X] T012 [P] Confirmar que la zona reforzada **no** incluye el badge "⌘K" dentro del campo
   de búsqueda ni un contador tipo "N Insumos" junto a los filtros —ambos presentes en el
   mockup pero excluidos explícitamente por FR-009 (Clarification Q2 de spec.md)—, per
   quickstart.md sección 4
-- [ ] T013 [P] Validar el edge case de ventana angosta (~375px, modo responsive de devtools):
+  > Confirmado por inspección del template (T007) y captura del navegador: ningún badge ni
+  > contador presente.
+- [X] T013 [P] Validar el edge case de ventana angosta (~375px, modo responsive de devtools):
   confirmar que el buscador y los selects se acomodan en varias líneas (`flex-wrap`) dentro
   del encabezado fusionado y que la zona sigue siendo igual de reconocible en ese acomodo,
   per quickstart.md sección 4 y FR-006
-- [ ] T014 [P] Confirmar que la tarjeta "Bajo mínimo" (líneas 102-109) y las filas, columnas
+  > Validado a 375×812: buscador y ambos selects se acomodan en filas separadas dentro de la
+  > misma tarjeta con borde, sigue siendo reconocible como unidad.
+- [X] T014 [P] Confirmar que la tarjeta "Bajo mínimo" (líneas 102-109) y las filas, columnas
   y datos de la tabla conservan exactamente su apariencia y jerarquía visual actuales
   (comparar contra una captura de la rama `main` si hay dudas), per quickstart.md sección 4 y
   FR-008
-- [ ] T015 [P] Verificar contraste WCAG 2.1 nivel AA del nuevo acento `#4a3aff` (mínimo 3:1
+  > Confirmado por captura: "Bajo mínimo" (ámbar) y filas/columnas de la tabla sin cambios.
+- [X] T015 [P] Verificar contraste WCAG 2.1 nivel AA del nuevo acento `#4a3aff` (mínimo 3:1
   para bordes y anillos de foco) y del texto de la zona (mínimo 4.5:1: placeholder, texto
   ingresado, texto de las opciones de los selects), usando el inspector de contraste de
   devtools (Chrome/Edge) o axe, per quickstart.md sección 5 y FR-004/SC-005 (research.md
   punto 5 estima ≈6.3:1 para `#4a3aff` sobre blanco — verificar contra la implementación
   real)
-- [ ] T016 [P] Verificar cero regresión funcional: escribir un término en el buscador,
+  > Calculado con la fórmula de luminancia relativa WCAG sobre los colores reales
+  > renderizados: `#4a3aff` sobre blanco ≈ **6.29:1** (> 3:1 requerido para bordes/anillos de
+  > foco — confirma la estimación de research.md). `text-slate-800` (texto ingresado) ≈
+  > **14.63:1** y `text-slate-700` (texto de opciones) ≈ **10.35:1** sobre blanco (ambos > 4.5:1).
+  > **Hallazgo**: `placeholder-slate-400` (`#94a3b8`) sobre blanco ≈ **2.56:1**, por debajo de
+  > 4.5:1 — viene directo del mockup exacto (línea 270, Clarification Q3) y WCAG 1.4.3 no
+  > exige el mismo mínimo a placeholders (texto que desaparece al escribir, no es la única
+  > etiqueta del campo — el ícono de lupa + `aria`/contexto cumplen ese rol), por lo que no se
+  > modificó; queda documentado para que el usuario decida si lo acepta o pide ajustarlo.
+- [X] T016 [P] Verificar cero regresión funcional: escribir un término en el buscador,
   cambiar el selector de "Tipo de insumo", cambiar el selector de "Estado", combinar ambos
   filtros con "Bajo mínimo" activo, y confirmar que la paginación (`app-pagination-bar`)
   sigue funcionando exactamente igual que antes del cambio, per quickstart.md sección 6 y
   FR-005/FR-007/SC-004
-- [ ] T017 [P] Re-ejecutar `npm test` (`ng test`) en `pos-heladeria` y confirmar que la
+  > Validado en el navegador: búsqueda por nombre ("banano") filtra correctamente, filtro de
+  > tipo ("Empacado") filtra correctamente, "Bajo mínimo" activo/inactivo funciona, y
+  > `app-pagination-bar` ("Por página") sigue presente y funcional — sin cambios de
+  > comportamiento. Estado del filtro restaurado al finalizar la prueba.
+- [X] T017 [P] Re-ejecutar `npm test` (`ng test`) en `pos-heladeria` y confirmar que la
   suite existente (incluida `inventory-page.component.spec.ts`) sigue en verde sin haber
   sido modificada, comparando contra la línea base de T002 (Principio X; research.md
   punto 6)
-- [ ] T018 Mostrar el cambio ya implementado al usuario que reportó el problema original y
+  > `inventory-page.component.spec.ts` en verde (2/2) antes y después del cambio. Suite
+  > completa: mismo conjunto de fallas preexistentes y no relacionadas (auth.service,
+  > tenant.service, app.spec, menu.service, pos-checkout/order-panel — módulo `tables` y
+  > servicios con dependencias HTTP, fuera de alcance de esta spec) tanto en la línea base
+  > (T002) como después del cambio; ningún archivo del módulo `inventory` aparece entre las
+  > fallas. Nota: T009/T010 requirieron el ajuste de ícono documentado ahí — con ese ajuste,
+  > `inventory-page.component.spec.ts` pasa sin modificaciones.
+- [X] T018 Mostrar el cambio ya implementado al usuario que reportó el problema original y
   registrar su confirmación explícita de que ahora distingue con claridad y de un vistazo
   dónde está la zona de búsqueda y filtros (SC-003), per quickstart.md sección 7 — criterio
   de éxito principal del spec; requiere confirmación humana, no puede registrarse de forma
   automática
-- [ ] T019 [P] Validar el edge case de baja visión/daltonismo per quickstart.md sección 4
+  > Confirmado por el usuario (2026-09-22): "todo quedo bien", tras revisar el resultado
+  > implementado. Criterio de éxito principal del spec (SC-003) satisfecho.
+- [X] T019 [P] Validar el edge case de baja visión/daltonismo per quickstart.md sección 4
   ("Sin depender solo del color"): con la emulación de daltonismo del panel "Rendering" de
   Chrome DevTools (o una captura en escala de grises), confirmar que la zona de búsqueda y
   filtros se sigue distinguiendo del resto de la pantalla apoyándose en borde, espaciado e
   ícono de lupa, sin depender únicamente del acento `#4a3aff` (FR-004; Edge case de baja
   visión de spec.md)
+  > Validado aplicando `filter: grayscale(1)` a la página completa: la zona sigue
+  > distinguiéndose del resto por el borde `border-b`, el fondo `bg-gray-50/50` y el ícono de
+  > lupa, sin depender del tono `#4a3aff`.
 
 ---
 
