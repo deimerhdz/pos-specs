@@ -2835,6 +2835,82 @@ solo clases y plantilla. **Clasificación**: DECISIÓN DE NEGOCIO. **Tratamiento
 
 ---
 
+### A-92 — [DECISIÓN DE NEGOCIO — spec 088] Imágenes de producto, logo y QR: validación de dueño y existencia, imagen base y borrado protegido
+
+**Qué cambia**: guardar la imagen de un producto, el logo del negocio o el QR de un método de pago
+deja de aceptar cualquier texto. (1) Una key nueva debe ser `{esquema}/{carpeta}/{nombre}` del propio
+negocio y de la carpeta del campo (`products`, `logo`, `payment-methods`), o se rechaza con 422;
+(2) el archivo debe existir en R2 (422 si no existe; 503 sin guardar ni borrar nada si el
+almacenamiento no responde); (3) los formularios envían la **imagen base** que vieron al abrirse
+(`image_url_base`, `logo_url_base`, `payment_info_base`): un formulario desactualizado cuya imagen no
+coincide con la vigente **no cambia la imagen** y guarda el resto de los campos, en silencio y sin
+aviso; (4) el archivo anterior se borra después del commit **solo si** es del propio negocio, está en
+convención y ninguna otra fila (producto, método de pago, comprobante o logo de cualquier negocio) lo
+referencia. Un valor de otro origen se conserva sin verificar ni borrar. La visualización de imágenes
+y el flujo feliz de subida no cambian para el administrador.
+
+**Por qué cambia**: hoy cualquier valor distinto del vigente cuenta como "cambio de imagen" y se
+borra el objeto anterior sin verificar nada; un formulario desactualizado que reenvía una imagen ya
+borrada deja una referencia rota **y** borra la imagen vigente (spec 088, problema detectado
+2026-09-29). Un negocio también podía apuntar a los archivos de otro.
+
+**Decisiones confirmadas / por confirmar** (research.md D4, D7, D8):
+- **D7 — CONFIRMADA (opción A)**: el QR **sí** se puede quitar por el mecanismo actual de
+  `payment_info` completo cuando la edición es legítima (base = vigente); el archivo no se borra.
+  Confirmó el usuario/negocio el 2026-09-29.
+- **D8 — POR CONFIRMAR CON EL NEGOCIO**: no se añade borrado del QR anterior al reemplazarlo o
+  quitarlo (comportamiento actual; el archivo queda huérfano, que es seguro y lo lista el reporte de
+  reconciliación). Es el valor por defecto que fijó el plan; añadirlo después no requiere cambio de
+  diseño (`deletable_key` + `is_key_referenced` ya lo soportan).
+- **D4 — consecuencia asumida**: una imagen **nueva** subida desde un formulario desactualizado se
+  ignora en silencio y queda huérfana hasta que el reporte la liste tras la ventana de gracia.
+
+**Quién y cuándo**: usuario/negocio, 2026-09-29. **Funcionalidades afectadas**: `pos-backend`
+(`core/storage.py`, `core/asset_refs.py`, `products/service.py`, `tenant/router.py`,
+`sales/service.py` y sus esquemas); `pos-heladeria` (`product.service.ts`, `product-form.component.ts`,
+`tenant-info.service.ts`, `payment-method.service.ts`, `payment-methods-page.component.ts`).
+Requiere desplegar el frontend **antes** que el backend (research D10). **Riesgo asumido**: una
+petición de API sin imagen base ya no puede declarar un cambio legítimo de imagen; pestañas abiertas
+con el bundle anterior durante el despliegue verían ignorada una subida. **Tests afectados**: los tres
+A-44 de `test_products_service.py` (se conserva lo que congelan), `test_products_image_key`,
+`test_tenant_logo_key`, `test_payment_methods_qr_key`. **Clasificación**: DECISIÓN DE NEGOCIO.
+**Tratamiento acordado**: `specs/088-integridad-referencias-r2/tasks.md` (T004–T043).
+
+---
+
+### A-93 — [DECISIÓN DE NEGOCIO — spec 088] Comprobantes del comensal: solo archivos del propio negocio y se guarda la key
+
+**Qué cambia**: el comprobante de transferencia deja de ser texto libre (hasta 500 caracteres).
+`POST /cart/submit` y `POST /cart/payment-attempts/{id}/receipt` solo aceptan una key o una URL del
+bucket gestionado que corresponda a un archivo **existente**, de la carpeta `comprobantes` y del
+**propio negocio** (422 en cualquier otro caso, incluida una URL de otro origen; 503 si el
+almacenamiento no responde, sin crear orden ni intento). En base de datos se guarda la **key** en vez
+de la URL absoluta; las tres respuestas hacia cajero y comensal (`PaymentAttemptResponse`,
+`CurrentPaymentAttemptSummary`, `DinerPaymentAttempt`) siguen entregando una URL lista para renderizar
+(ahora del dominio de assets). Las filas históricas con URL absoluta se siguen leyendo y se migran con
+`app.scripts.migrate_receipt_keys` (simulación por defecto, `--apply`, `--revert`; idempotente; las
+filas de otro origen, fuera de convención o con archivo inexistente quedan intactas y reportadas). El
+`receipt_hash` de auditoría (spec 074) de los eventos nuevos se calcula sobre la key persistida; los
+ya emitidos no se reescriben.
+
+**Por qué cambia**: el comprobante era texto libre que nadie validaba: cualquiera podía enviar una
+URL arbitraria o el archivo de otro negocio y aparecería ante el cajero en "Pagos por confirmar"
+(spec 088, problema detectado 2026-09-29).
+
+**Garantía limitada**: el comensal no tiene sesión, así que solo se garantiza prefijo del negocio +
+carpeta + existencia; no se garantiza quién subió el archivo.
+
+**Quién y cuándo**: usuario/negocio, 2026-09-29. **Funcionalidades afectadas**: `pos-backend`
+(`cart/service.py`, `cart/router.py`, `cart/schemas.py`, `orders/schemas.py`, script nuevo); superficie
+de cobro "Pagos por confirmar" (sigue mostrando el comprobante; ningún total cambia). **Riesgo
+asumido**: un frontend que envíe `key` a un backend anterior mostraría una imagen rota al cajero, por
+eso ese envío es el último paso opcional (research D10); revertir el backend exige antes
+`migrate_receipt_keys --revert --apply`. **Tests afectados**: `test_cart_payment_attempts`,
+`test_orders_payment_gate`, `test_order_audit_log`. **Clasificación**: DECISIÓN DE NEGOCIO.
+**Tratamiento acordado**: `specs/088-integridad-referencias-r2/tasks.md` (T044–T055).
+
+---
+
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
 
 La entrada #1 de `memoria-historica.md` (2026-07-17, commit `8777acbc`) documenta que
