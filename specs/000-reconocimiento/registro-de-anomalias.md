@@ -2636,6 +2636,205 @@ promoción eliminada (guardan su descuento como texto/JSON). **Clasificación**:
 
 ---
 
+### A-84 — [DECISIÓN DE NEGOCIO — spec 087] El fix de descuento `package_price` sobre adicionales no recalcula ventas ya finalizadas
+
+**Qué cambia**: `evaluate_variant_sets()` (`app/api/v1/promotions/service.py`), rama
+`type == "package_price"`, pasa a descontar el valor de la promoción sobre `base_unit_price`
+(precio base sin adicionales) en vez de sobre `unit_price` completo (que hoy incluye los
+adicionales) — mismo patrón que ya usa la rama `percent` desde spec 083/FR-027. Con esto, el total
+de un producto en promoción con adicionales vuelve a ser Precio Promocional + Σ Precio
+Adicionales en las 4 superficies que reutilizan este motor: armado del pedido, checkout, "Pagos
+por confirmar" y detalle de venta.
+
+**Por qué cambia**: bug confirmado en esta investigación (spec 087, research.md D6) — hoy los
+adicionales quedan absorbidos por el "descuento" de la promoción, cobrando de menos. El fix corrige
+el cálculo hacia adelante.
+
+**Alcance frente a ventas ya emitidas**: **no se recalcula ninguna venta histórica.** El
+`Sale.total`/`Sale.change_given` de ventas ya finalizadas antes del despliegue de este fix se deja
+tal cual quedó calculado en su momento (Principio VII, inmutabilidad de ventas históricas). El fix
+aplica solo a checkouts creados a partir del despliegue. Confirmado explícitamente con el usuario/
+negocio durante la implementación de spec 087 (2026-09-28) — no se pidió recálculo retroactivo.
+
+**Quién y cuándo**: usuario/negocio, 2026-09-28. **Funcionalidades afectadas**: `pos-backend`
+(`app/api/v1/promotions/service.py::evaluate_variant_sets`, reutilizado por `cart/service.py`,
+`orders/checkout.py` y `sales/builder.py`; test `test_promotions_service.py`). Sin cambios de
+frontend. **Riesgo asumido**: ninguno adicional — es una corrección de cálculo hacia adelante, sin
+tocar datos ya persistidos. **Clasificación**: DECISIÓN DE NEGOCIO. **Tratamiento acordado**:
+`specs/087-fix-caja-mesas-menu-ventas/tasks.md` (T002-T005).
+
+---
+
+### A-85 — [DECISIÓN DE NEGOCIO — spec 087] "Agregar producto" se resuelve por `order_id`, no por mesa
+
+**Qué cambia**: se retira `POST /orders/tables/{table_id}/items` (y `add_item_to_table` en
+`consolidation.py`) en favor de `POST /orders/{order_id}/items` (`add_item_to_order`). "Agregar
+producto" sobre un pedido abierto anexa siempre al pedido específico ya identificado por
+`order_id`, nunca resuelto implícitamente "la orden abierta de esta mesa". Un pedido con
+`status` `pagada`/`cancelada` rechaza el anexo con `409`. `get_or_create_open_order` (usada por
+`consolidate_table`, consolidación de carritos del Menú QR) no se toca — es una función distinta,
+fuera de alcance.
+
+**Por qué cambia**: FR-007 de spec 087 permite pedidos paralelos por mesa (más de un `CustomerOrder`
+abierto sobre la misma mesa); con eso, resolver "la orden abierta de la mesa" de forma implícita ya
+no es un contrato válido — puede haber más de una. El único consumidor de este endpoint en todo el
+frontend es `pos-terminal.store.ts::saveOrder()`; el Menú QR nunca lo usó (agrega al carrito vía
+`POST /cart/items`).
+
+**Quién y cuándo**: usuario/negocio, 2026-09-28 (research.md D4). **Funcionalidades afectadas**:
+`pos-backend` (`orders/consolidation.py`, `orders/router.py`, `test_orders_consolidation.py`) y
+`pos-heladeria` (`dining-session.service.ts::addTableItem`→`addOrderItems`,
+`pos-terminal.store.ts::saveOrder()`). **Riesgo asumido**: cualquier integración externa que
+llamara directamente `POST /orders/tables/{table_id}/items` dejaría de funcionar — confirmado en
+la investigación que el único consumidor es el propio frontend, ya migrado en la misma spec.
+**Clasificación**: DECISIÓN DE NEGOCIO. **Tratamiento acordado**:
+`specs/087-fix-caja-mesas-menu-ventas/tasks.md` (T006-T015).
+
+---
+
+### A-86 — [DECISIÓN DE NEGOCIO — spec 087] Numeración de pedidos de mesa persistida en el backend, reiniciada por turno de caja
+
+**Qué cambia**: el número de pedido de mesa ("Pedido N") deja de recalcularse por posición de
+arreglo en el frontend (`orderTabs()`, causa raíz del reordenamiento visible al crear pedidos
+nuevos) y pasa a asignarse **una sola vez**, en el backend, al crear el `CustomerOrder`
+(`orders/service.py::create_order` y `cart/service.py::submit_cart`, los dos puntos de creación de
+pedidos `DINE_IN`). Se persiste en las columnas nuevas `cash_shift_id`/`table_order_number` de
+`customer_orders`. El contador se reinicia en 1 en cada apertura de turno de caja — se resuelve
+contra el turno abierto más reciente del tenant.
+
+**Por qué cambia**: bug confirmado (spec 087, research.md D3) — el frontend rotulaba por posición
+en un arreglo que no reordena y hereda el orden descendente por `created_at` de `GET /orders`, por
+lo que el pedido más nuevo aparecía como "Pedido 1", cambiando los números de los pedidos ya
+existentes cada vez que se creaba uno nuevo.
+
+**Decisión de negocio ya confirmada** (research.md, sesión de clarificación previa a esta
+implementación): un solo turno de caja abierto a la vez; el pedido toma el turno abierto más
+reciente del tenant; el contador reinicia por turno, no es global.
+
+**Quién y cuándo**: usuario/negocio, 2026-09-28. **Funcionalidades afectadas**: `pos-backend`
+(`models/customer_order.py`, `cash/service.py::resolve_dine_in_table_order`, `orders/service.py`,
+`cart/service.py`, `orders/schemas.py`, migración Alembic aditiva) y `pos-heladeria`
+(`dining.interface.ts`, `pos-terminal.store.ts::orderTabs()`). **Riesgo asumido**: ninguno —
+migración aditiva, pedidos históricos sin `table_order_number` quedan en `NULL` y se muestran sin
+número. **Clasificación**: DECISIÓN DE NEGOCIO. **Tratamiento acordado**:
+`specs/087-fix-caja-mesas-menu-ventas/tasks.md` (T016-T026).
+
+---
+
+### A-87 — [DECISIÓN DE NEGOCIO — spec 087] Eliminación completa de Arqueo Parcial (UI + endpoint + tabla, con borrado físico del historial)
+
+**Qué cambia**: se retira por completo la funcionalidad "Arqueo Parcial" — botón y modal en
+`cash-dashboard.component.ts`, servicio `cash.service.ts::partialCount()`, interfaz
+`PartialCount`, endpoint `POST .../partial-count` (`cash/router.py`), schemas
+`PartialCountIn`/`PartialCountResponse` y el modelo `CashPartialCount` completo, incluida su tabla
+(`cash_partial_counts`) vía migración Alembic destructiva (`op.drop_table`). El historial existente
+de arqueos parciales se elimina físicamente y no es recuperable tras aplicar la migración. **No se
+toca** `cash-arqueo-modal.component.ts` (arqueo de *cierre* de turno, conteo por denominación) —
+es una funcionalidad distinta que esta spec no modifica.
+
+**Por qué cambia**: pedido del usuario/negocio — Arqueo Parcial no aporta valor operativo y
+complica la interfaz de caja; se decide retirarlo en vez de mantenerlo.
+
+**Quién y cuándo**: usuario/negocio, 2026-09-28 (research.md D2). **Funcionalidades afectadas**:
+`pos-backend` (`cash/router.py`, `cash/schemas.py`, `models/cash_partial_count.py`,
+`models/__init__.py`, migración Alembic destructiva) y `pos-heladeria`
+(`cash-dashboard.component.ts`, `cash.service.ts`, `cash.interface.ts`). **Riesgo asumido**: es una
+eliminación física de datos históricos, irreversible una vez aplicada la migración en un entorno
+con datos reales — se exige backup previo confirmado antes de aplicarla (quickstart.md,
+"Verificación de la migración destructiva"). **Clasificación**: DECISIÓN DE NEGOCIO. **Tratamiento
+acordado**: `specs/087-fix-caja-mesas-menu-ventas/tasks.md` (T027-T037).
+
+---
+
+### A-88 — [DECISIÓN DE NEGOCIO — spec 087] `customer_name` pasa de opcional a obligatorio al crear cualquier pedido nuevo
+
+**Qué cambia**: `POST /orders` exige `customer_name` no vacío para los tres tipos de pedido
+(`DINE_IN`, `TAKEAWAY`, `DELIVERY` — este último ya lo exigía) en `orders/service.py::create_order`.
+En el frontend, `manual-order-page.component.ts` deja de autocompletar `"Consumidor final"` en los
+tabs Mesa/Para llevar (`applyDefaultCustomerName()`) y bloquea el botón "Crear pedido" sin nombre,
+igual que ya hacía el tab Domicilio. El nombre se muestra de forma destacada en la tarjeta de
+pedido de la Terminal y en el detalle de venta.
+
+**Por qué cambia**: pedido del usuario/negocio — identificar al cliente por su nombre real en vez
+de un placeholder genérico mejora la operación en mesa/para llevar. Los pedidos históricos sin
+nombre (o con `"Consumidor final"` ya persistido) **no se migran** — quedan tal cual quedaron
+creados.
+
+**Quién y cuándo**: usuario/negocio, 2026-09-28 (research.md D7). **Funcionalidades afectadas**:
+`pos-backend` (`orders/service.py::create_order`, test en `test_orders_service.py`) y
+`pos-heladeria` (`manual-order-page.component.ts`, `pos-order-panel.component.ts`,
+`order-detail.component.ts`). **Riesgo asumido**: ninguno sobre datos existentes — la validación
+solo aplica a pedidos creados desde el despliegue en adelante. **Clasificación**: DECISIÓN DE
+NEGOCIO. **Tratamiento acordado**: `specs/087-fix-caja-mesas-menu-ventas/tasks.md` (T038-T048).
+
+---
+
+### A-89 — [DECISIÓN DE NEGOCIO — spec 087] `OrderItemOptionResponse` gana `name` y `group_name` derivados; los adicionales dejan de depender del menú vigente
+
+**Qué cambia**: la respuesta de pedidos (`OrderItemOptionResponse`) expone dos campos nuevos de solo
+lectura, `name` y `group_name`, resueltos en lectura por JOIN contra `options` y `option_groups`
+(aditivo, sin migración y sin snapshot: `order_item_options.option_id` es FK a `options.id` sin
+`ON DELETE`, así que una opción referenciada por un pedido no puede borrarse). En el frontend, el
+panel del pedido de la Terminal de Mesas usa el menú vigente como primera fuente y estos campos
+como respaldo, de modo que un adicional guardado sigue viéndose como "Nombre xN" aunque su producto
+ya no esté en el menú (hoy se pinta como `" x1"` o se descarta). Los borradores pasan al mismo
+formato "Nombre xN" (antes `"2x Nombre"`, y sin multiplicador con cantidad 1).
+
+**Por qué cambia**: reporte del negocio — los adicionales no se veían bien en el panel del pedido,
+lo que provoca pedidos incompletos en cocina (FR-015, research.md D12).
+
+**Quién y cuándo**: usuario/negocio, 2026-09-29. **Funcionalidades afectadas**: `pos-backend`
+(`orders/schemas.py`, `models/order_item.py`) y `pos-heladeria` (`pos-terminal.store.ts`,
+`dining.interface.ts`). **Riesgo asumido**: ninguno sobre datos existentes — campos aditivos y
+opcionales; ningún dato histórico se modifica. **Clasificación**: DECISIÓN DE NEGOCIO.
+**Tratamiento acordado**: `specs/087-fix-caja-mesas-menu-ventas/tasks.md` (T063-T072);
+contrato en `contracts/api-changes.md` §7.
+
+---
+
+### A-90 — [DECISIÓN DE NEGOCIO — spec 087] El "TOTAL ORDEN" del pedido manual se calcula sobre el conjunto vigente completo
+
+**Qué cambia**: el desglose "TOTAL ORDEN" de la página de pedido manual pasa de calcularse solo
+sobre los borradores a calcularse sobre el conjunto vigente completo (ítems guardados no anulados +
+borradores), con las promociones reevaluadas por el backend (`POST /orders/draft-preview`, **sin
+cambio de contrato**) y con $0 cuando no queda ningún ítem. Se añade una guarda contra respuestas
+fuera de orden. Los combos siguen fuera de `draft-preview` y se suman a su precio de combo. Ninguna
+venta emitida se recalcula (Principio VII).
+
+**Por qué cambia**: reporte del negocio — al editar un pedido manual el total quedaba desactualizado
+(no reaccionaba a los ítems guardados y perdía las promociones), un error de dinero visible al
+cliente (FR-016, research.md D13).
+
+**Quién y cuándo**: usuario/negocio, 2026-09-29. **Funcionalidades afectadas**: `pos-heladeria`
+(`pos-terminal.store.ts::draftPreviewPayload/loadDraftPreview`, `manual-order-page.component.ts`).
+**Riesgo asumido**: ninguno sobre datos — el total no se persiste; solo cambia lo que se muestra
+antes de cobrar, y el cobro sigue calculándose en backend. **Clasificación**: DECISIÓN DE NEGOCIO.
+**Tratamiento acordado**: `specs/087-fix-caja-mesas-menu-ventas/tasks.md` (T073-T081).
+
+---
+
+### A-91 — [DECISIÓN DE NEGOCIO — spec 087] Dos cambios solo de presentación: fila de presentación del Menú QR y nota por producto
+
+**Qué cambia**: (US8) la fila de presentación del modal "Elige tu presentación" (`app-product-select`)
+deja de truncar el nombre con "…" y muestra la promoción como etiqueta secundaria en su propia línea;
+sin promoción, solo el nombre. (US11) la nota por producto del componente compartido
+`app-cart-item-options` pasa a un único estilo reforzado (≥16px, semibold, alto contraste,
+`rounded-lg`, multilínea) en las tres pantallas que lo usan. Sin cambio de datos ni de cobro;
+`order.notes` (nota general) queda fuera de alcance. **Ampliación 2026-09-29**: además, el Menú QR
+del comensal mapeaba mal el nombre de la variante (`diner.service.ts` leía `name` cuando el backend
+manda `presentation_name` desde spec 084), por lo que la fila mostraba solo la promoción; el mapper
+pasa a leer `presentation_name` (T093–T094). Sin cambio de datos, de contrato ni de cobro.
+
+**Por qué cambia**: reporte del negocio — la presentación no se leía junto a la promoción y la nota
+era ilegible para quien prepara el pedido (FR-014 y FR-017, research.md D11 y D14).
+
+**Quién y cuándo**: usuario/negocio, 2026-09-29. **Funcionalidades afectadas**: `pos-heladeria`
+(`product-select.component.ts`, `cart-item-options.component.ts`). **Riesgo asumido**: ninguno —
+solo clases y plantilla. **Clasificación**: DECISIÓN DE NEGOCIO. **Tratamiento acordado**:
+`specs/087-fix-caja-mesas-menu-ventas/tasks.md` (T082-T088, T093-T096).
+
+---
+
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
 
 La entrada #1 de `memoria-historica.md` (2026-07-17, commit `8777acbc`) documenta que
