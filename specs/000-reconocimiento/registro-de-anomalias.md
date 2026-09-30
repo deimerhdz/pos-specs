@@ -3031,6 +3031,21 @@ Las opciones no `per_line` se siguen clonando como hoy. **Tests afectados**: nin
 
 ---
 
+### A-98 — [HALLAZGO — spec 090] La impresión del reporte de caja sigue saliendo "en blanco" tras el arreglo de la spec 089
+
+**Qué pasa**: al imprimir el reporte de cierre de caja (tras cerrar el turno o desde el historial) en
+Brave, la vista previa y el PDF muestran solo el encabezado y pie del navegador; el contenido no se
+ve, y ocurre con tema claro y oscuro. La spec 089 (Historia 5) lo declaró corregido tras verificarlo
+con un Chrome automatizado sin fondos; la vista previa real (T070) nunca se comprobó.
+
+**Tratamiento**: spec 090 —diagnóstico nuevo en Brave (FR-009), corrección y verificación real
+(FR-010)—. La Historia 5 de la spec 089 queda reemplazada en lo relativo a la impresión
+(FR-011). **Tests afectados**: ninguno de comportamiento de datos.
+**Clasificación**: HALLAZGO. **Tratamiento acordado**:
+`specs/090-fix-cash-report-print-blank/spec.md`.
+
+---
+
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
 
 La entrada #1 de `memoria-historica.md` (2026-07-17, commit `8777acbc`) documenta que
