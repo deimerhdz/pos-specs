@@ -2911,6 +2911,126 @@ eso ese envío es el último paso opcional (research D10); revertir el backend e
 
 ---
 
+### A-94 — [DECISIÓN DE NEGOCIO — spec 089] Los adicionales del Menú QR se cobran por las unidades elegidas, no por unidad de producto
+
+**Qué cambia**: en una línea del carrito del Menú QR, el precio de los **adicionales** (opciones de
+grupos con recargo) deja de multiplicarse por la cantidad del producto. Total de línea =
+(precio de la presentación o promoción × cantidad del producto) + Σ (precio del adicional × cantidad
+elegida de ese adicional). Hoy el precio de línea se guarda como "precio de una unidad" (presentación
++ adicionales × su cantidad) y se multiplica por la cantidad del producto, por lo que 2 hamburguesas
+de $15.000 con 1 tocino de $3.000 cobran $36.000 y con la regla nueva cobran **$33.000**. El mismo
+criterio aplica a la **comanda de cocina** ("2 hamburguesas + 1 tocino") y al **descuento de
+inventario** del insumo del adicional (1 unidad, no 2), y a los combos/promociones con adicionales
+(spec 083). Las opciones de grupos **incluidos** (sin recargo, p. ej. sabores) conservan su
+comportamiento por unidad de producto. Solo aplica a líneas **nuevas o editadas** del Menú QR: los
+carritos, pedidos, ventas y facturas existentes, y las líneas armadas desde la terminal POS o el
+pedido manual, conservan la regla por unidad (Principio VII); dentro de un mismo pedido pueden
+convivir ambas reglas, cada línea con la que se creó.
+
+**Por qué cambia**: el cliente paga de más y no entiende el cobro (spec 089, problema detectado
+2026-09-30); revierte, para el Menú QR, la lectura "el adicional va por cada unidad" que dejó la
+spec 065 (opciones con cantidad) y que la spec 087 (US1) solo corrigió respecto a las promociones.
+
+**Quién y cuándo**: usuario/negocio, 2026-09-30 (respuestas 1–6 de la sesión de aclaración de la
+spec 089). **Funcionalidades afectadas**: `pos-backend` (cálculo de línea del catálogo, carrito,
+consolidación, checkout, venta/factura, consumo de inventario, comanda de cocina) y `pos-heladeria`
+(carrito y selector del Menú QR, resumen del pedido, "Pagos por confirmar", detalle de venta). Exige
+poder distinguir las líneas nuevas de las históricas (estrategia de datos y de reversa en el plan,
+Principio VIII). **Riesgo asumido**: divergencia entre el Menú QR (una vez por línea) y la terminal
+POS (por unidad) para un mismo pedido, aceptada por el negocio para no ampliar el alcance.
+**Tests afectados**: los `"CONGELA comportamiento actual:"` que fijen el cobro por unidad del
+adicional, su consumo o su comanda (`test_catalog_line_pricing`, `test_catalog_consumption_plan`,
+`test_cart_service`, `test_orders_consolidation`, `test_orders_service`) se actualizan explícitamente
+citando esta entrada. **Clasificación**: DECISIÓN DE NEGOCIO. **Tratamiento acordado**:
+`specs/089-fix-adicionales-cierre-mesa-caja-pos/spec.md` (Historias 1 y 3).
+
+---
+
+### A-95 — [DECISIÓN DE NEGOCIO — spec 089] Todo cierre de mesa notifica al comensal y su pantalla es siempre "¡Gracias por tu visita!"
+
+**Qué cambia**: (1) **todo** camino que pase la sesión de una mesa a cerrada —cierre del cajero,
+"Liberar mesa" del cajero o el mesero, liberación automática del scheduler, cobro completo y cierre
+automático de una sesión sin órdenes— emite el aviso en tiempo real `session.closed` al canal de la
+sesión. Hoy lo emiten el cobro, el scheduler y el cierre con cobro, pero **no** "Liberar mesa"
+(`release_table`) ni el cierre de una sesión sin órdenes. (2) Al recibirlo, o al detectar una sesión
+cerrada al reanudar o reconectar, el Menú QR muestra **siempre** la pantalla de gracias, sin
+historial ni recibo, con el carrito local limpio; hoy cae en la pantalla de ingreso de nombre con un
+mensaje, salvo que el comensal hubiera salido voluntariamente. (3) Reabrir u ocupar de nuevo la mesa
+**no** reactiva la sesión del cliente anterior: solo un nuevo escaneo del QR crea una sesión nueva.
+El rechazo de acciones con un token de sesión cerrada (401) ya existe y se conserva.
+
+**Por qué cambia**: el cliente sigue con el menú operativo o recibe un mensaje que le permite
+reingresar con el mismo enlace sin volver a escanear el QR, y puede hacer pedidos a una mesa que ya
+no es suya (spec 089, problema detectado 2026-09-30).
+
+**Quién y cuándo**: usuario/negocio, 2026-09-30 (respuestas 7–11 de la sesión de aclaración de la
+spec 089). **Funcionalidades afectadas**: `pos-backend` (`orders/router.py::release_table`,
+`table_sessions/service.py`, `core/events.py`, `core/scheduler.py`) y `pos-heladeria`
+(`public-menu.component.ts`, `diner-shell.component.ts`, `diner.service.ts`, `diner-token.store.ts`).
+Sin cambio de contrato de API ni de modelo de datos. **Riesgo asumido**: un comensal legítimo que
+abre el mismo enlace tras el cierre inicia un ingreso nuevo (equivale a volver a escanear).
+**Enmienda 2026-09-30 (/speckit-clarify, FR-015a/b/c y FR-017a)**: el "riesgo asumido" de arriba
+queda **sustituido**. Como el enlace del QR es fijo por mesa, reabrirlo tras el cierre **no** inicia
+un ingreso nuevo en esa pestaña: todo cierre ejecuta el mismo borrado que "Salir" y deja la misma
+marca mínima por pestaña, y recargar (F5, "Atrás", "Adelante") muestra una única pantalla de acceso
+denegado ("Por favor, escanea nuevamente el código QR de la mesa para ingresar al menú"). Solo una
+pestaña nueva o un escaneo nuevo crean sesión. Esto también cambia "Salir" (borrado ampliado,
+pantalla de gracias al instante y este texto tras recargar, en lugar de "Acceso finalizado…").
+**Tests afectados**: ninguno `"CONGELA"` conocido en backend; en frontend se actualizan los de
+"Salir" y vista `exited` (`public-menu.component.spec.ts`, `diner-token.store.spec.ts`) citando A-95.
+**Clasificación**: DECISIÓN DE NEGOCIO. **Tratamiento acordado**:
+`specs/089-fix-adicionales-cierre-mesa-caja-pos/spec.md` (Historia 4).
+
+---
+
+### A-96 — [DECISIÓN DE NEGOCIO — spec 089] Se retira el modal "El total cambió" del cobro; el total se refresca al guardar y nunca se cobra un importe no visto
+
+**Qué cambia**: se retira, como mecanismo de descubrimiento, la doble verificación bloqueante de la
+spec 073 (FR-007, D11) que abre el modal "El total cambió" al pulsar Cobrar, y el aviso equivalente
+del alta de pedido manual (FR-015a). El total de la orden se actualiza de inmediato al agregar,
+modificar o quitar productos (estimación local que el servidor confirma o reconcilia), de modo que
+el total visible antes de Cobrar ya es el vigente. **Se conserva la garantía de fondo**: si aun así
+el total real difiere al cobrar (causa externa), la pantalla lo actualiza con un aviso **no
+bloqueante** y **no cobra** hasta que el cajero pulse Cobrar de nuevo sobre el total nuevo; nunca se
+cobra un importe que el cajero no vio. Si el servidor rechaza un producto agotado, se muestra el
+producto agotado por nombre y el total vuelve al valor confirmado.
+
+**Por qué cambia**: al agregar productos a una orden ya guardada, la vista previa del total no se
+refrescaba, así que la pantalla mostraba un total viejo y el modal aparecía en cada cobro de una
+orden ampliada (spec 089, problema detectado 2026-09-30). El usuario/negocio pidió eliminar el
+modal y que el total se actualice desde que se guarda el pedido.
+
+**Quién y cuándo**: usuario/negocio, 2026-09-30 (respuestas 14–16 de la sesión de aclaración de la
+spec 089). El **aviso no bloqueante con segundo Cobrar** ante un cambio de última hora es un valor
+por defecto del plan, **por confirmar con el negocio**. **Funcionalidades afectadas**:
+`pos-heladeria` (`pos-checkout-panel.component.ts`, `manual-order-page.component.ts`,
+`pos-terminal.store.ts` y las superficies de cobro, incluida "Pagos por confirmar"); el backend solo
+aporta el mensaje que nombra el producto agotado, si hoy no lo hace. **Riesgo asumido**: el total
+estimado localmente puede diferir un instante del confirmado por el servidor (promociones,
+impuestos); se reconcilia sin diálogo. **Tests afectados**:
+`pos-checkout-panel.component.spec.ts` y `pos-terminal.store.spec.ts` (los casos de la spec 073 que
+esperan el modal). **Clasificación**: DECISIÓN DE NEGOCIO. **Tratamiento acordado**:
+`specs/089-fix-adicionales-cierre-mesa-caja-pos/spec.md` (Historia 2).
+
+---
+
+### A-97 — [HALLAZGO — spec 089] "Repartir por unidades" clona las opciones de un ítem sin su cantidad
+
+**Qué pasa**: `table_sessions/service.py::set_assignments` (repartir una línea por unidades entre
+comensales) clona las filas de `OrderItemOption` de la línea original **sin copiar su `quantity`**,
+así que cada opción clonada queda en 1 aunque la original tuviera otra cantidad elegida. Es un
+defecto preexistente, ajeno a la spec 089.
+
+**Tratamiento**: solo se **documenta** (Principio V); no se corrige en esta spec. Con la regla nueva
+de la spec 089 (A-94), los adicionales de una línea (`addons_total` y las opciones `per_line`) se
+quedan **solo en la fila original**: las filas nuevas del reparto nacen con `addons_total = 0` y sin
+opciones `per_line`, de modo que el defecto de `quantity` no puede alterar el cobro de adicionales.
+Las opciones no `per_line` se siguen clonando como hoy. **Tests afectados**: ninguno.
+**Clasificación**: HALLAZGO (sin cambio de comportamiento). **Tratamiento acordado**:
+`specs/089-fix-adicionales-cierre-mesa-caja-pos/research.md` (D5, D5-b).
+
+---
+
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
 
 La entrada #1 de `memoria-historica.md` (2026-07-17, commit `8777acbc`) documenta que
