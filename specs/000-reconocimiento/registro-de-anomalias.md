@@ -3117,6 +3117,51 @@ acordado**: `specs/091-admin-subdominio-nombre-completo/research.md` (D11).
 
 ---
 
+### A-103 — [DECISIÓN DE NEGOCIO — spec 092] El paso de revisión del checkout pasa a mostrar la fila "Ahorro" cuando hay promoción vigente
+
+**Qué cambia**: el resumen del pedido deja de estar embebido en `review-step.component.ts` y pasa a ser
+el componente compartido `checkout-order-summary.component.ts`, consumido por el paso de revisión (paso
+1) y por el paso de datos de pago (paso 3). Como efecto de esa unificación, el **paso 1 gana una fila
+"Ahorro"** con el descuento vigente, que hoy **no pinta** — hoy solo lista las líneas y el Total. El
+cambio solo se manifiesta **cuando hay una promoción vigente aplicada**: sin promoción
+`savings() === 0`, la fila no aparece y el paso 1 se ve exactamente igual que antes, que es el caso por
+defecto.
+
+**Por qué cambia**: la spec 092 se contradecía consigo misma. Su cuerpo normativo (FR-012, FR-021 y
+US4 esc. 1 — "las líneas, el orden, el formato de los montos, **el Ahorro** y el Total son idénticos"
+en ambos pasos) exige la fila en los dos pasos, mientras que su sección "Impacto sobre Funcionalidades
+Existentes" afirmaba que el paso 1 "cambia de forma estructural, no visual" y que "cualquier diferencia
+visible en ese paso respecto a hoy es una regresión". Al leer el código quedó claro quién tenía razón:
+el paso 1 no tenía esa fila, así que mostrarla *es* una diferencia visible. Prevalece el cuerpo
+normativo: ocultar el Ahorro en el paso 1 y mostrarlo en el paso 3 violaría de frente **RN-004** ("el
+comensal nunca debe ver dos cifras distintas para lo mismo"), que es exactamente la desconfianza que
+esta spec vino a eliminar. **Quién y cuándo**: dueño de la spec, 2026-10-02.
+
+**Funcionalidades afectadas**: `pos-heladeria` únicamente — `review-step.component.ts` (consume el
+componente compartido), `transfer-details-step.component.ts` (bloque de total + resumen colapsable),
+`dining-cart.service.ts` (dos miembros **aditivos**: `grossTotal` y `savings`; la semántica de `total()`
+**no cambia**). **`pos-backend` no se toca**: cero endpoints, cero cambios de contrato de `GET /cart`,
+cero migraciones. El carrito del menú público (`cart.component.ts`) **no se migró** por decisión
+explícita (research.md D7) y sigue igual.
+
+**Riesgo asumido**: ninguno sobre datos ni sobre cálculo. El "Ahorro" no es un campo nuevo ni un cálculo
+del frontend: es la diferencia entre dos números que el backend ya resolvía y que el servicio
+descartaba (`CartResponse.total` vs. `discounted_total`). El contrato lo fijan los characterization
+tests de `pos-backend` (`app/characterization_tests/test_cart_service.py`), que quedan **intactos**
+(Principio III). **Válvula de escape conservada**: el componente expone el input `showSavings` con
+default `true`; si el negocio revierte la decisión, el paso 1 pasa `false` y nada más cambia.
+
+**Tests afectados**: `review-step.component.spec.ts` es **nuevo** y se escribió **antes** de la
+extracción, como base de no-regresión del paso 1 (research.md D10), deliberadamente **sin** el prefijo
+`"CONGELA comportamiento actual:"` — congelar lo que el mismo spec autoriza a cambiar obligaría a editar
+el test en el commit que lo crea. **Clasificación**: DECISIÓN DE NEGOCIO. **Tratamiento acordado**:
+`specs/092-resumen-pedido-transferencia/` (Historia 4, research.md D6).
+
+**Estado final (2026-10-02)**: IMPLEMENTADA (T028–T031). Queda pendiente la comparación manual lado a
+lado de los dos pasos (T032, `quickstart.md` §7).
+
+---
+
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
 
 La entrada #1 de `memoria-historica.md` (2026-07-17, commit `8777acbc`) documenta que
