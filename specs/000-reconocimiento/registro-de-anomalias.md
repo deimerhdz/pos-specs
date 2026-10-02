@@ -3046,6 +3046,77 @@ con un Chrome automatizado sin fondos; la vista previa real (T070) nunca se comp
 
 ---
 
+### A-99 — [DECISIÓN DE NEGOCIO — spec 091] El login de plataforma exige el host `admin`; el Super Admin ya no entra sin cabecera, desde un host desconocido ni desde el dominio raíz
+
+**Qué cambia**: `POST /auth/login` decide el ámbito de la cuenta solo por el host explícito. El host
+`admin` (sin distinguir mayúsculas ni puerto) abre el ámbito de plataforma (`tenant_id IS NULL`); el
+slug de un negocio registrado abre solo ese negocio; un host ausente, vacío, desconocido o el dominio
+raíz responde `401 Invalid credentials` sin consultar cuentas. Antes, cualquier host sin negocio o la
+ausencia de cabecera dejaba entrar al Super Admin. En el frontend, `admin.<dominio>` pasa a ser el
+contexto SUPER_ADMIN y el dominio raíz, `www`/`app` y los hosts desconocidos pasan a un nuevo estado
+"no reconocido" sin formulario de login.
+
+**Por qué cambia**: el Super Admin podía entrar desde cualquier host inexistente, y el SPA tomaba
+`admin.skeilopos.com` por un negocio llamado "admin" (404 "Tenant not found for host 'admin'" tras el
+login). **Quién y cuándo**: dueño de la spec, 2026-10-02 (clarificaciones de la spec 091).
+**Funcionalidades afectadas**: `pos-backend` (`auth/routes.py`), `pos-heladeria` (resolver de tenant,
+interceptor, guards, login). **Riesgo asumido**: `X-Tenant-Host` lo fija el cliente; es política de
+aislamiento del producto, no una frontera criptográfica (la protección real sigue siendo credenciales +
+rol + `tenant_id` del token). **Tests afectados**: `tenant-resolver.spec.ts` (casos de raíz/`www`/host
+desconocido). **Clasificación**: DECISIÓN DE NEGOCIO. **Tratamiento acordado**:
+`specs/091-admin-subdominio-nombre-completo/` (Historias 1 y 2).
+
+**Estado final (2026-10-02)**: IMPLEMENTADA (T015–T043); verificada con pruebas en ambos repos, por API y en navegador local. Pendiente el despliegue (`implementation-notes.md`).
+
+---
+
+### A-100 — [DECISIÓN DE NEGOCIO — spec 091] Crear una invitación exige un nombre completo validado
+
+**Qué cambia**: `POST /invitations` exige `name` (2–100 caracteres, letras latinas, espacios,
+apóstrofes y guiones, al menos dos letras); el formulario "Invitar usuario" lo captura primero; el
+correo saluda por el nombre y la cuenta nace con ese nombre al aceptar. Las invitaciones anteriores
+(sin nombre) siguen funcionando: el correo saluda "Hola:" y la cuenta toma el correo como nombre, como
+hoy. **Por qué cambia**: la cuenta nacía con el correo como nombre. **Quién y cuándo**: dueño de la
+spec, 2026-10-02. **Funcionalidades afectadas**: `pos-backend` (invitaciones, correo, consumo en login,
+migración `user_invitations.name`), `pos-heladeria` (módulo de usuarios). **Tests afectados**: los de
+invitaciones de la spec 037 se amplían, no se debilitan. **Clasificación**: DECISIÓN DE NEGOCIO.
+**Tratamiento acordado**: `specs/091-admin-subdominio-nombre-completo/` (Historias 3 a 5).
+
+**Estado final (2026-10-02)**: IMPLEMENTADA (T044–T068, migración `c91a4e7b2d58`); falta el recorrido manual con correo real (T069).
+
+---
+
+### A-101 — [DECISIÓN DE NEGOCIO — spec 091] Subdominios reservados: `admin`, `assets`, `api`, `docs` además de `www`, `app`
+
+**Qué cambia**: el alta de negocio rechaza (422) un `host` igual (sin distinguir mayúsculas ni espacios
+en los extremos) a cualquiera de `www`, `app`, `admin`, `assets`, `api`, `docs`; el formulario del Super
+Admin lo valida antes de enviar. Antes solo se exigían 3 caracteres. La lista es única y vive en ambos
+repos con pruebas de paridad. **Por qué cambia**: `admin` es el host de la plataforma y los otros son
+subdominios de infraestructura. **Quién y cuándo**: dueño de la spec, 2026-10-02. No se migra ni se
+borra ningún negocio existente (verificación previa: 0 filas con host reservado).
+**Clasificación**: DECISIÓN DE NEGOCIO. **Tratamiento acordado**:
+`specs/091-admin-subdominio-nombre-completo/` (Historia 2).
+
+**Estado final (2026-10-02)**: IMPLEMENTADA (T007–T008, T034, T036, T039). Al probarla por HTTP apareció que el handler 422 de `/super-admin` devolvía 500 con validadores `ValueError`; corregido en `error_response.py`.
+
+---
+
+### A-102 — [HALLAZGO — spec 091] El formulario de usuarios del Super Admin llama a `POST/PATCH /super-admin/users`, que no existen (405)
+
+**Qué pasa**: el backend solo tiene `GET /super-admin/users` (la spec 037 retiró la creación directa de
+usuarios), pero `AdminUserFormComponent` y su botón "Nuevo usuario" llaman a `POST` y `PATCH`, que
+responden 405. Crear, editar y activar/desactivar desde esa pantalla fallan hoy.
+
+**Tratamiento**: decisión abierta O-1. Por defecto (opción A) la spec 091 solo aplica el validador del
+nombre y el helper de presentación en pantalla, sin endpoints nuevos; el guardado seguirá fallando
+hasta que el dueño elija retirar el formulario (B) o crear los endpoints (C), ambas en spec propia.
+**Tests afectados**: ninguno de comportamiento de datos. **Clasificación**: HALLAZGO. **Tratamiento
+acordado**: `specs/091-admin-subdominio-nombre-completo/research.md` (D11).
+
+**Estado final (2026-10-02)**: ABIERTA (O-1). Se aplicó la opción A (validador y presentación en pantalla); el guardado sigue dando 405 hasta que el dueño elija B o C.
+
+---
+
 ## Nota sobre una entrada de `memoria-historica.md` deliberadamente excluida
 
 La entrada #1 de `memoria-historica.md` (2026-07-17, commit `8777acbc`) documenta que
